@@ -4,7 +4,7 @@
 
 #mode-name {
     width: auto;
-    color: $comment;
+    color: $fg;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -139,9 +139,10 @@ MonthView > .month--today {
     margin-bottom: 1;
 }
 
+/* A label, green like the IP mode's */
 #weather-city-label {
     width: 6;
-    color: $comment;
+    color: $green;
 }
 
 /* Underlined like ouikit's theme filter, so it reads as a place to type */
@@ -190,5 +191,29 @@ MonthView > .month--today {
 }
 
 #forecast > .weather--message {
+    color: $comment;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   IP - the public address, then what ipinfo.io knows about it
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#ip {
+    height: auto;
+    padding: 1 4;
+    color: $fg;
+}
+
+/* Green like the keys on the Help panel: grey was too faint to read */
+#ip > .ip--label {
+    color: $green;
+}
+
+#ip > .ip--address {
+    color: $blue;
+    text-style: bold;
+}
+
+#ip > .ip--message {
     color: $comment;
 }

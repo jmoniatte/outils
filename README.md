@@ -1,6 +1,7 @@
 # outils
 
-Everyday tools in the terminal: a calendar and the weather forecast, one per run. The calendar
+Everyday tools in the terminal, one per run: a calendar, the weather forecast and this
+computer's public IP. The calendar
 shows three months side by side like `cal -3`, the current one in the middle and today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once you have moved away, comes back to the current month.
@@ -10,6 +11,10 @@ The weather shows the conditions now and a row per day for a week, from
 unless you set one, see below); the place found shows in the City box, in blue. Click the box, type
 another place and press Enter to look it up, or Escape to leave the box.
 The weather icons need a [Nerd Font](https://www.nerdfonts.com).
+
+The IP mode shows the public (WAN) address this computer reaches the internet from, with what
+[ipinfo.io](https://ipinfo.io) knows about it: host name, city, region, country, postal code,
+location, time zone and network. It needs no account.
 
 ## Install
 
@@ -25,6 +30,7 @@ where its shared UI library, [ouikit](https://github.com/jmoniatte/ouikit), live
 ```bash
 outils            # the calendar
 outils weather    # the weather forecast
+outils ip         # this computer's public (WAN) IP address, from ipinfo.io
 ```
 
 Each opens on its own, so a status-bar block can open the one it is about. `?` shows the

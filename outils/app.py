@@ -10,7 +10,7 @@ from textual.widgets import Static
 
 from . import REPOSITORY_URL, __version__
 from .config import CONFIG_FILE, Config, load_config
-from .widgets import CalendarView, WeatherView
+from .widgets import CalendarView, IpView, WeatherView
 
 STYLES_DIR = Path(__file__).parent / "styles"
 # ouikit's stylesheets first, so the app's own rules win where they differ
@@ -19,6 +19,7 @@ STYLE_FILES = (*ouikit.STYLE_FILES, STYLES_DIR / "outils.tcss")
 MODES = {
     "calendar": ("Calendar", CalendarView),
     "weather": ("Weather", WeatherView),
+    "ip": ("IP", IpView),
 }
 DEFAULT_MODE = next(iter(MODES))
 
@@ -28,7 +29,7 @@ def load_stylesheet() -> str:
 
 
 class OutilsApp(BaseApp):
-    """Everyday tools, one mode per run: a calendar or the weather forecast."""
+    """Everyday tools, one mode per run: a calendar, the weather forecast or this computer's public IP."""
 
     TITLE = "outils"
     VERSION = __version__

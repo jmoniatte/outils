@@ -1,8 +1,10 @@
 # outils
 
-TUI with everyday tools, one mode per run: `outils calendar` (the default) or `outils weather`.
+TUI with everyday tools, one mode per run: `outils calendar` (the default), `outils weather` or
+`outils ip`.
 It opens as a small pop-up from a status-bar block, so each block opens the mode it is about.
-The calendar shows three months; the weather shows now and the next days, from Open-Meteo.
+The calendar shows three months; the weather shows now and the next days, from Open-Meteo; the
+IP mode shows the public address, from ipinfo.io.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
@@ -24,6 +26,7 @@ screen, and every message, errors included, goes to the header.
 ```bash
 outils            # the calendar
 outils weather
+outils ip
 ```
 
 It refuses to start unless stdin and stdout are a terminal (ouikit's `start`).
@@ -53,7 +56,8 @@ outils/                 # git root + pyproject.toml (run uv commands here)
                         # location, units)
     months.py           # The month grids, shift_month and the day labels; no Textual
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
-    widgets/            # One view per mode (calendar_view.py, weather_view.py); month_view.py draws one month
+    ipinfo.py           # ipinfo.io: the public address and the fields shown; no Textual
+    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py); month_view.py draws one month
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
 ```
 
@@ -121,6 +125,14 @@ wind, humidity and rain), then one row per day for `weather.DAYS` days, today fi
 others by their full day name. Icons are Nerd Font weather glyphs, as ouie uses Nerd Font
 battery icons; a clear night gets the moon. The colors come from TCSS through the view's
 component classes (high orange, low cyan, rain chance blue).
+
+## IP
+
+`ipinfo.fetch` asks `https://ipinfo.io/json` (no account, no key) with urllib; `IpView` runs it in
+a worker when it mounts and shows one row per field in `ipinfo.FIELDS` order, the address first
+and in bold blue, skipping any field ipinfo.io leaves out (and its `readme` link). Failures raise
+`IpInfoError`, shown in the view and in the header. ipinfo.io limits unauthenticated requests
+per day, far above what opening a pop-up uses.
 
 ## Themes
 
