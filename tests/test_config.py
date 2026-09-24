@@ -40,5 +40,20 @@ class WeekStartTest(unittest.TestCase):
         self.assertEqual(unknown.warnings, ["week_start: 'someday' is not a day of the week, using monday"])
 
 
+class WeatherConfigTest(unittest.TestCase):
+    def test_location_and_units_are_read_and_bad_units_warn(self) -> None:
+        self.assertEqual((Config().location, Config().units), ("Portland, OR", "metric"))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("location: ' Victoria, BC '\nunits: Imperial\n")
+            set_up = load_config(path)
+            path.write_text("location: 42\nunits: kelvin\n")
+            wrong = load_config(path)
+        self.assertEqual((set_up.location, set_up.units, set_up.warnings), ("Victoria, BC", "imperial", []))
+        self.assertEqual((wrong.location, wrong.units), ("Portland, OR", "metric"))
+        self.assertEqual(len(wrong.warnings), 2)
+        self.assertIn("kelvin", wrong.warnings[1])
+
+
 if __name__ == "__main__":
     unittest.main()

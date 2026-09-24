@@ -7,11 +7,6 @@
     color: $comment;
 }
 
-.mode-placeholder {
-    color: $comment;
-    padding: 1 2;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    CALENDAR - months side by side, like cal -3
    ═══════════════════════════════════════════════════════════════════════ */
@@ -128,4 +123,72 @@ MonthView > .month--today {
     background: $blue;
     color: $bg;
     text-style: bold;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WEATHER - the place, the weather now, then a row per day
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#weather {
+    height: auto;
+    padding: 1 4;
+}
+
+#weather-city-row {
+    height: 2;
+    margin-bottom: 1;
+}
+
+#weather-city-label {
+    width: 6;
+    color: $comment;
+}
+
+/* Underlined like ouikit's theme filter, so it reads as a place to type */
+#weather-city {
+    width: 40;
+    height: 2;
+    padding: 0;
+    background: transparent;
+    color: $fg;
+    border: none !important;
+    border-bottom: solid $gutter !important;
+}
+
+#weather-city:focus {
+    border-bottom: solid $blue !important;
+}
+
+/* The place found, in full, until the box is clicked again */
+#weather-city.-found {
+    color: $blue;
+}
+
+#forecast {
+    height: auto;
+    color: $fg;
+}
+
+#forecast > .weather--temperature {
+    text-style: bold;
+}
+
+#forecast > .weather--dim {
+    color: $comment;
+}
+
+#forecast > .weather--high {
+    color: $orange;
+}
+
+#forecast > .weather--low {
+    color: $cyan;
+}
+
+#forecast > .weather--rain {
+    color: $blue;
+}
+
+#forecast > .weather--message {
+    color: $comment;
 }

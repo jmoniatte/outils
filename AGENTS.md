@@ -2,7 +2,7 @@
 
 TUI with everyday tools, one mode per run: `outils calendar` (the default) or `outils weather`.
 It opens as a small pop-up from a status-bar block, so each block opens the mode it is about.
-The calendar shows three months; the weather mode is still a placeholder.
+The calendar shows three months; the weather shows now and the next days, from Open-Meteo.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
@@ -49,8 +49,10 @@ outils/                 # git root + pyproject.toml (run uv commands here)
   outils/               # Python package
     app.py              # OutilsApp, an ouikit BaseApp: MODES, the header, the keys
     __main__.py         # The command line: which mode to open
-    config.py           # Optional ~/.config/outils/config.yaml (theme, through ouikit.config; week_start)
+    config.py           # Optional ~/.config/outils/config.yaml (theme, through ouikit.config; week_start,
+                        # location, units)
     months.py           # The month grids, shift_month and the day labels; no Textual
+    weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
     widgets/            # One view per mode (calendar_view.py, weather_view.py); month_view.py draws one month
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
 ```
@@ -87,6 +89,38 @@ from TCSS through `MonthView`'s component classes, so a theme change repaints th
 
 `week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is
 kept as calendar's number (Monday 0). An unknown day is a warning in the header and Monday.
+
+## Weather
+
+`weather.py` talks to Open-Meteo with the standard library (urllib), no account and no key; its
+calls block, so `ForecastView.load` runs `weather.forecast` in a worker. Failures raise
+`WeatherError`, shown in the view and in the header.
+
+`WeatherView` is a City box over a `ForecastView`. It opens on `location` from `config.yaml`
+(`Portland, OR` by default), and Enter in the box looks up what was typed; the forecast on show
+stays until the new one comes. Once found, the place replaces the text in the box, in full and
+in blue (`ForecastView.Found`, the `-found` class), which is the only place the forecast says
+where it is for; clicking the box turns it back to plain text to type over. The app sets `AUTO_FOCUS = None` so the box never takes focus by
+itself (it would swallow `?`, `t` and `q`); it has focus only once clicked, and lets go after
+Enter or Escape (a `WeatherView` binding, so Escape there does not quit). A typed city is not
+saved.
+
+A place is "City", or "City" with qualifiers after commas ("City, Region, Country"). `find_place` asks Open-Meteo's
+geocoding for the city and `pick_place` chooses among the answers: the exact name first (it lists
+Vitória before Victoria), then the most qualifiers, each matching a region, a country or a country code,
+in full or by initials ("BC", "Hong Kong" for HK), or a US state or Canadian province by its
+postal code (`REGION_CODES`: "OR", "ME", "QC"). A single word never matches by its first letter,
+or "ME" would find Multnomah County. A place's own label ("Portland, Maine, United States"), as
+the box shows it, finds that place again, so Enter on an untouched box is harmless. The result is cached in
+`~/.cache/outils/places.json` (`XDG_CACHE_HOME` respected), keyed by the location text, so opening
+the pop-up costs one request. `units` is `metric` (the default) or `imperial`, passed to
+Open-Meteo, which converts.
+
+`ForecastView` shows the place, the weather now (icon, temperature, words, then feels like,
+wind, humidity and rain), then one row per day for `weather.DAYS` days, today first and the
+others by their full day name. Icons are Nerd Font weather glyphs, as ouie uses Nerd Font
+battery icons; a clear night gets the moon. The colors come from TCSS through the view's
+component classes (high orange, low cyan, rain chance blue).
 
 ## Themes
 

@@ -8,3 +8,10 @@ theme: terminal
 
 # First day of the week in the calendar: monday (the default) to sunday.
 week_start: monday
+
+# Where the weather opens (Portland, OR by default): "City", or "City, Region or Country" when
+# the name is shared (Portland, ME; Paris, France). Looked up once through Open-Meteo, then cached.
+location: Portland, OR
+
+# metric (°C, km/h, mm; the default) or imperial (°F, mph, in)
+units: metric

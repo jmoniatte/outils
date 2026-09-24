@@ -33,6 +33,9 @@ class OutilsApp(BaseApp):
     TITLE = "outils"
     VERSION = __version__
     REPOSITORY_URL = REPOSITORY_URL
+    # Nothing takes focus on its own: the weather's city box would swallow ?, t and q; the
+    # calendar focuses itself for its arrow keys
+    AUTO_FOCUS = None
 
     BINDINGS = [
         HELP_BINDING,
