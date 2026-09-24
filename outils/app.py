@@ -4,9 +4,11 @@ import ouikit
 from ouikit.app_header import AppHeader
 from ouikit.base_app import HELP_BINDING, THEME_BINDING, BaseApp
 from ouikit.shortcuts import GENERAL
+from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.widgets import Static
+from textual.containers import Horizontal
+from textual.widgets import Button, Static
 
 from . import REPOSITORY_URL, __version__
 from .config import CONFIG_FILE, Config, load_config
@@ -58,6 +60,16 @@ class OutilsApp(BaseApp):
         label, view = MODES[self.mode]
         yield AppHeader(Static(label, id="mode-name"))
         yield view(self.config)
+        # Every mode ends the same way: a rule, then Close on the left
+        with Horizontal(id="app-footer"):
+            close = Button("Close", id="btn-close")
+            close.can_focus = False  # A click must not pull focus off the mode and its keys
+            yield close
+
+    @on(Button.Pressed, "#btn-close")
+    def _close(self, event: Button.Pressed) -> None:
+        event.stop()
+        self.exit()
 
     def on_mount(self) -> None:
         for warning in self.config.warnings:

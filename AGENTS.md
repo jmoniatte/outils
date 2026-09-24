@@ -63,7 +63,11 @@ outils/                 # git root + pyproject.toml (run uv commands here)
 
 ## Modes
 
-One mode per run, no tabs: switching means closing the pop-up and opening the other one.
+One mode per run, no tabs: switching means closing the pop-up and opening the other one. Every
+mode sits between the same header and footer: `OutilsApp.compose` adds `#app-footer`, docked at
+the bottom, a rule like the header's (`border-top`) over a Close button on the left that quits.
+Close cannot take focus, so a click leaves the mode's keys working. App tests patch
+`weather_view.forecast` and `ip_view.fetch` so no mode reaches the network.
 `MODES` in `app.py` maps each name the command line takes to its header label and view widget;
 the first one is the default. The header shows the label on the right (`#mode-name`), and Help
 lists the view's own `BINDINGS` (`HELP_BINDINGS` is set per mode) before the app's. A new mode

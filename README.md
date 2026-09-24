@@ -34,8 +34,8 @@ outils ip         # this computer's public (WAN) IP address, from ipinfo.io
 ```
 
 Each opens on its own, so a status-bar block can open the one it is about. `?` shows the
-shortcuts, `t` picks a theme and `q` or `Esc` quits. Click the name in the header to open the
-shortcuts too.
+shortcuts, `t` picks a theme, and `q`, `Esc` or the **Close** button at the bottom left quits.
+Click the name in the header to open the shortcuts too.
 
 ## Configuration
 

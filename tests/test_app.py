@@ -9,13 +9,21 @@ from ouikit.theme_picker import ThemePicker
 
 from outils.app import OutilsApp
 from outils.config import Config
+from outils.ipinfo import IpInfoError
+from outils.weather import WeatherError
 from outils.widgets import CalendarView, WeatherView
 
 
 class AppTest(unittest.TestCase):
     def run_app(self, body, mode="calendar", config=None):
         async def main():
-            with tempfile.TemporaryDirectory() as tmp, patch("outils.app.CONFIG_FILE", Path(tmp) / "config.yaml"):
+            with (
+                tempfile.TemporaryDirectory() as tmp,
+                patch("outils.app.CONFIG_FILE", Path(tmp) / "config.yaml"),
+                # The modes that ask a service get no answer: the tests never reach the network
+                patch("outils.widgets.weather_view.forecast", side_effect=WeatherError("offline")),
+                patch("outils.widgets.ip_view.fetch", side_effect=IpInfoError("offline")),
+            ):
                 app = OutilsApp(mode, config or Config(theme="onedark"))
                 async with app.run_test(size=(80, 24)) as pilot:
                     await pilot.pause()
@@ -30,6 +38,23 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(app.query_one("#mode-name").render().plain, label)
                 self.assertEqual(len(app.query(view)), 1)
                 self.assertEqual(len(app.query(other)), 0)
+
+            with self.subTest(mode=mode):
+                self.run_app(body, mode)
+
+    def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
+        for mode in ("calendar", "weather", "ip"):
+            async def body(app, pilot):
+                footer = app.query_one("#app-footer")
+                close = app.query_one("#btn-close")
+                self.assertEqual(footer.region.bottom, app.size.height)
+                self.assertEqual(close.region.y, app.size.height - 1)
+                self.assertEqual(close.region.x, 1)
+                self.assertEqual(footer.styles.border_top[0], "solid")
+                # Clicking it quits, and it never takes focus from the mode
+                await pilot.click("#btn-close")
+                await pilot.pause()
+                self.assertFalse(app.is_running)
 
             with self.subTest(mode=mode):
                 self.run_app(body, mode)

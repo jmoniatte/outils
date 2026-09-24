@@ -8,6 +8,33 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   FOOTER - the same in every mode: a rule like the header's, then Close
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#app-footer {
+    dock: bottom;
+    height: auto;
+    padding: 0 1;
+    border-top: solid $gutter;
+}
+
+/* Neutral, like the Close button on ouikit's panels */
+#btn-close {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    margin: 0;
+    border: none;
+    padding: 0 2;
+    background: $bg-light;
+    color: $fg;
+}
+
+#btn-close:hover {
+    background: $gutter;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    CALENDAR - months side by side, like cal -3
    ═══════════════════════════════════════════════════════════════════════ */
 
