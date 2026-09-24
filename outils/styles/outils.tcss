@@ -1,0 +1,13 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   MODES - one per run, named on the right of the header
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#mode-name {
+    width: auto;
+    color: $comment;
+}
+
+.mode-placeholder {
+    color: $comment;
+    padding: 1 2;
+}

@@ -1,0 +1,38 @@
+[project]
+name = "outils"
+dynamic = ["version"]
+description = "TUI with everyday tools: a calendar and the weather forecast"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=7.2.0",
+    "rich>=14.2.0",
+    "pyyaml>=6.0",
+    "ouikit",
+]
+
+[tool.uv.sources]
+# Not published: installed from GitHub's master; `uv lock --upgrade-package ouikit` picks up new commits.
+# To work on ouikit and this app together, use the folder next to this one instead:
+# ouikit = { path = "../ouikit", editable = true }
+ouikit = { git = "ssh://git@github.com/jmoniatte/ouikit.git", branch = "master" }
+
+[project.scripts]
+outils = "outils.__main__:main"
+
+[dependency-groups]
+# 0.16 turns on a much larger default rule set; adopt it deliberately, not by drift
+dev = ["ruff>=0.15.7,<0.16"]
+
+[build-system]
+requires = ["setuptools>=61.0", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["outils*"]
+
+[tool.setuptools.package-data]
+outils = ["styles/*.tcss"]
+
+[tool.setuptools_scm]
