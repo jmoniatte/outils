@@ -65,7 +65,7 @@ class AppTest(unittest.TestCase):
             await pilot.pause()
             self.assertIsInstance(app.screen, HelpScreen)
             keys = [key.render().plain for key in app.screen.query(".shortcut-key")]
-            self.assertEqual(keys, ["←", "→", "?", "t", "q"])
+            self.assertEqual(keys, ["←", "→", "?", "t", "y", "q"])
             await pilot.press("escape", "t")
             await pilot.pause()
             self.assertIsInstance(app.screen, ThemePicker)

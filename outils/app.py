@@ -2,7 +2,7 @@ from pathlib import Path
 
 import ouikit
 from ouikit.app_header import AppHeader
-from ouikit.base_app import HELP_BINDING, THEME_BINDING, BaseApp
+from ouikit.base_app import COPY_BINDING, HELP_BINDING, THEME_BINDING, BaseApp
 from ouikit.shortcuts import GENERAL
 from textual import on
 from textual.app import ComposeResult
@@ -43,6 +43,7 @@ class OutilsApp(BaseApp):
     BINDINGS = [
         HELP_BINDING,
         THEME_BINDING,
+        COPY_BINDING,
         Binding("q", "quit", "Quit", group=GENERAL),
         # Panels and dialogs bind escape themselves, so it only quits from the mode
         Binding("escape", "quit", show=False),
