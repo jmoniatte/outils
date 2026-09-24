@@ -11,3 +11,121 @@
     color: $comment;
     padding: 1 2;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CALENDAR - months side by side, like cal -3
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#calendar {
+    height: auto;
+    align-horizontal: center;
+    padding: 1 0;
+}
+
+#calendar-body {
+    width: auto;
+    height: auto;
+}
+
+/* As wide as the months below: Previous over the left edge, Today in the middle, Next on the right */
+#calendar-nav {
+    width: 100%;
+    height: 1;
+    margin-bottom: 1;
+}
+
+#calendar-nav .spacer {
+    width: 1fr;
+}
+
+#calendar-nav Button {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    border: none;
+    padding: 0 2;
+    background: $bg-light;
+    color: $fg;
+}
+
+#calendar-nav Button:hover {
+    background: $gutter;
+}
+
+/* The same width either side, so Today lands in the middle; green, where Today is blue */
+#calendar-nav #btn-previous,
+#calendar-nav #btn-next {
+    /* Room to spare around "← Previous": with none, Textual wraps it and only the arrow shows */
+    width: 14;
+    padding: 0 1;
+    background: $green 30%;
+    color: $green;
+}
+
+#calendar-nav #btn-previous:hover,
+#calendar-nav #btn-next:hover {
+    background: $green 50%;
+}
+
+#calendar-nav #btn-today {
+    background: $blue 30%;
+    color: $blue;
+}
+
+#calendar-nav #btn-today:hover {
+    background: $blue 50%;
+}
+
+#calendar-months {
+    width: auto;
+    height: auto;
+}
+
+/* Four columns between months: this margin plus the space each day cell keeps on its sides */
+MonthView {
+    margin-left: 2;
+    color: $fg;
+}
+
+MonthView:first-of-type {
+    margin-left: 0;
+}
+
+MonthView > .month--title {
+    color: $fg;
+}
+
+/* Today's month, wherever it is in the row */
+MonthView > .month--title-current {
+    color: $blue;
+    text-style: bold;
+}
+
+/* A month wholly before today's, faded like its days */
+MonthView > .month--title-past {
+    color: $comment;
+}
+
+MonthView > .month--weekdays {
+    color: $fg;
+}
+
+/* Saturday and Sunday, marked in the day names only: grey numbers mean past */
+MonthView > .month--weekend {
+    color: $comment;
+}
+
+MonthView > .month--rule {
+    color: $gutter;
+}
+
+/* Days before today */
+MonthView > .month--past {
+    color: $comment;
+}
+
+MonthView > .month--today {
+    background: $blue;
+    color: $bg;
+    text-style: bold;
+}

@@ -53,7 +53,7 @@ class OutilsApp(BaseApp):
     def compose(self) -> ComposeResult:
         label, view = MODES[self.mode]
         yield AppHeader(Static(label, id="mode-name"))
-        yield view()
+        yield view(self.config)
 
     def on_mount(self) -> None:
         for warning in self.config.warnings:

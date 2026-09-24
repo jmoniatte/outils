@@ -5,3 +5,6 @@
 # browse them; the choice is written back here.
 theme: terminal
 
+
+# First day of the week in the calendar: monday (the default) to sunday.
+week_start: monday

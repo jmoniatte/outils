@@ -1,7 +1,9 @@
 # outils
 
-Everyday tools in the terminal: a calendar and the weather forecast, one per run. Both are still
-to come; for now outils is the shell they will live in.
+Everyday tools in the terminal: a calendar and the weather forecast, one per run. The calendar
+shows three months side by side like `cal -3`, the current one in the middle and today
+highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
+**Today**, shown once you have moved away, comes back to the current month. The weather forecast is still to come.
 
 ## Install
 
@@ -31,6 +33,7 @@ Nothing is required. Press `t` to browse the themes: each one applies as the cur
 
 ```yaml
 theme: one-light
+week_start: sunday   # the calendar's first column; monday by default
 ```
 
 The default, `terminal`, reads the colours from the terminal itself. The other themes are

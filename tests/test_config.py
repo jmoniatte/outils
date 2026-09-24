@@ -26,5 +26,19 @@ class LoadConfigTest(unittest.TestCase):
         self.assertIn("not valid YAML", broken.warnings[0])
 
 
+class WeekStartTest(unittest.TestCase):
+    def test_week_start_takes_a_day_name_and_defaults_to_monday(self) -> None:
+        self.assertEqual(Config().week_start, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("week_start: Sunday\n")
+            sunday = load_config(path)
+            path.write_text("week_start: someday\n")
+            unknown = load_config(path)
+        self.assertEqual((sunday.week_start, sunday.warnings), (6, []))
+        self.assertEqual(unknown.week_start, 0)
+        self.assertEqual(unknown.warnings, ["week_start: 'someday' is not a day of the week, using monday"])
+
+
 if __name__ == "__main__":
     unittest.main()
