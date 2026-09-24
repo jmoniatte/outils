@@ -1,9 +1,9 @@
 # outils
 
-TUI with everyday tools, one mode per run: `outils calendar` (the default), `outils weather` or
-`outils ip`.
-It opens as a small pop-up from a status-bar block, so each block opens the mode it is about.
-The calendar shows three months; the weather shows now and the next days, from Open-Meteo; the
+TUI with everyday tools, one tab each: `outils calendar` (the default), `outils weather` or
+`outils ip` says which tab it opens on.
+It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
+The calendar shows this month and the next; the weather shows now and the next days, from Open-Meteo; the
 IP mode shows the public address, from ipinfo.io.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
@@ -51,7 +51,7 @@ the commented-out `../ouikit` path.
 outils/                 # git root + pyproject.toml (run uv commands here)
   outils/               # Python package
     app.py              # OutilsApp, an ouikit BaseApp: MODES, the header, the keys
-    __main__.py         # The command line: which mode to open
+    __main__.py         # The command line: which tab to open on
     config.py           # Optional ~/.config/outils/config.yaml (theme, through ouikit.config; week_start,
                         # location, units)
     months.py           # The month grids, shift_month and the day labels; no Textual
@@ -63,27 +63,36 @@ outils/                 # git root + pyproject.toml (run uv commands here)
 
 ## Modes
 
-One mode per run, no tabs: switching means closing the pop-up and opening the other one. Every
-mode sits between the same header and footer: `OutilsApp.compose` adds `#app-footer`, docked at
-the bottom, a rule like the header's (`border-top`) over a Close button on the left that quits.
+Each mode is a tab of the `#modes` `TabbedContent`, under the header; the command line picks the
+one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
+the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
+The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
+can take it (the calendar, for its arrows) and clears it otherwise, so a hidden view never keeps
+it. A view must not focus itself: `TabbedContent` switches to the tab of whatever has focus.
+Weather and IP ask their service the first time their tab shows (`on_show`), so opening the
+calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
+would break.
+
+Every tab sits over the same footer: `OutilsApp.compose` adds `#app-footer`, docked at the
+bottom, a rule like the header's (`border-top`) over a Close button on the left that quits.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network.
-`MODES` in `app.py` maps each name the command line takes to its header label and view widget;
-the first one is the default. The header shows the label on the right (`#mode-name`), and Help
-lists the view's own `BINDINGS` (`HELP_BINDINGS` is set per mode) before the app's. A new mode
-is a view in `widgets/` and an entry in `MODES`; `__main__` offers it on its own.
+`MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
+the first one is the default. Help lists the view's own `BINDINGS` (`HELP_BINDINGS` is set when
+its tab shows) before the app's. A new mode is a view in `widgets/` and an entry in `MODES`;
+`__main__` offers it on its own.
 
 ## Calendar
 
-`CalendarView` puts `before` + 1 + `after` `MonthView`s side by side (1 and 1 by default), the
-month in focus in the middle, under the Previous, Today and Next buttons; it starts on today's
+`CalendarView` puts `before` + 1 + `after` `MonthView`s side by side (0 and 1 by default), the
+month in focus first, under the Previous, Today and Next buttons; it starts on today's
 month. `CalendarView.action_shift(delta)` moves them all (Previous, Next, `←` and `→`), and
-`show_month` puts any month in the middle (Today, which is hidden while today's month is
-already there; hidden with `visible`, so it keeps its place). The buttons cannot take focus, so the calendar keeps it and its keys work after
+`show_month` puts any month in focus (Today, which is hidden while today's month is
+on show, first or not; hidden with `visible`, so it keeps its place). The buttons cannot take focus, so the calendar keeps it and its keys work after
 a click. The button row is as wide as the months (`width: 100%` of an auto-width parent), and
 Previous and Next share a width so Today lands in the middle. Each `MonthView` is laid out like
 `cal`, with room to read it: every day sits in a four-column cell (its two digits and a space on
-each side), so a month is 28 columns wide and three need 88, which the pop-up allows (90). Top
+each side), so a month is 28 columns wide and two need 58. Top
 to bottom: the name centered, a blank row, the day names, a dashed rule under them, then always
 `months.WEEKS_SHOWN` (6) week rows, so months side by side line up and a shift never changes
 the height. Months sit two columns apart, four with the cells' own space. Time reads from the
@@ -133,7 +142,7 @@ component classes (high orange, low cyan, rain chance blue).
 ## IP
 
 `ipinfo.fetch` asks `https://ipinfo.io/json` (no account, no key) with urllib; `IpView` runs it in
-a worker when it mounts and shows one row per field in `ipinfo.FIELDS` order, the address first
+a worker the first time it shows and shows one row per field in `ipinfo.FIELDS` order, the address first
 and in bold blue, skipping any field ipinfo.io leaves out (and its `readme` link). Failures raise
 `IpInfoError`, shown in the view and in the header. ipinfo.io limits unauthenticated requests
 per day, far above what opening a pop-up uses.

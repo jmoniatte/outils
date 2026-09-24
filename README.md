@@ -1,10 +1,10 @@
 # outils
 
-Everyday tools in the terminal, one per run: a calendar, the weather forecast and this
+Everyday tools in the terminal, one tab each: a calendar, the weather forecast and this
 computer's public IP. The calendar
-shows three months side by side like `cal -3`, the current one in the middle and today
+shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
-**Today**, shown once you have moved away, comes back to the current month.
+**Today**, shown once the current month is off screen, comes back to the current month.
 
 The weather shows the conditions now and a row per day for a week, from
 [Open-Meteo](https://open-meteo.com) (free, no account). It opens on your `location` (Portland, OR
@@ -28,13 +28,13 @@ where its shared UI library, [ouikit](https://github.com/jmoniatte/ouikit), live
 ## Use
 
 ```bash
-outils            # the calendar
-outils weather    # the weather forecast
-outils ip         # this computer's public (WAN) IP address, from ipinfo.io
+outils            # opens on the calendar
+outils weather    # opens on the weather forecast
+outils ip         # opens on this computer's public (WAN) IP address, from ipinfo.io
 ```
 
-Each opens on its own, so a status-bar block can open the one it is about. `?` shows the
-shortcuts, `t` picks a theme, `y` copies the text selected with the mouse, and `q`, `Esc` or the **Close** button at the bottom left quits.
+Each command opens on its own tab, so a status-bar block can open the one it is about. Click a
+tab or press `Tab` to switch. `?` shows the shortcuts, `t` picks a theme, `y` copies the text selected with the mouse, and `q`, `Esc` or the **Close** button at the bottom left quits.
 Click the name in the header to open the shortcuts too.
 
 ## Configuration

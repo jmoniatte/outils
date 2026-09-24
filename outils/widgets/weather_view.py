@@ -37,6 +37,7 @@ class WeatherView(Vertical):
         super().__init__(id="weather")
         self.config = config
         self.today = today
+        self.asked = False
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="weather-city-row"):
@@ -44,8 +45,11 @@ class WeatherView(Vertical):
             yield Input(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
         yield ForecastView(self.config.units, self.today)
 
-    def on_mount(self) -> None:
-        self.query_one(ForecastView).load(self.config.location)
+    def on_show(self) -> None:
+        # Asked the first time its tab shows, so opening another tab costs no request
+        if not self.asked:
+            self.asked = True
+            self.query_one(ForecastView).load(self.config.location)
 
     @on(events.DescendantFocus)
     def _city_focused(self, event: events.DescendantFocus) -> None:

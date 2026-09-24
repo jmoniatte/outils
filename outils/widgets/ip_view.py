@@ -14,7 +14,7 @@ LABEL = max(len(label) for _, label in FIELDS) + 2
 class IpView(Widget):
     """This computer's public address, then where ipinfo.io places it and whose network it is on.
 
-    It asks ipinfo.io when it mounts. The colors come from TCSS through the component classes,
+    It asks ipinfo.io the first time it shows. The colors come from TCSS through the component classes,
     so a theme change repaints them.
     """
 
@@ -24,9 +24,13 @@ class IpView(Widget):
         super().__init__(id="ip")
         self.rows: list[tuple[str, str]] = []
         self.message = "Asking ipinfo.io..."
+        self.asked = False
 
-    def on_mount(self) -> None:
-        self.load()
+    def on_show(self) -> None:
+        # Asked the first time its tab shows, so opening another tab costs no request
+        if not self.asked:
+            self.asked = True
+            self.load()
 
     @work(exclusive=True)
     async def load(self) -> None:

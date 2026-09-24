@@ -1,14 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   MODES - one per run, named on the right of the header
-   ═══════════════════════════════════════════════════════════════════════ */
-
-#mode-name {
-    width: auto;
-    color: $fg;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   FOOTER - the same in every mode: a rule like the header's, then Close
+   FOOTER - the same under every tab: a rule like the header's, then Close
    ═══════════════════════════════════════════════════════════════════════ */
 
 #app-footer {
@@ -35,13 +26,13 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   CALENDAR - months side by side, like cal -3
+   CALENDAR - this month and the next, side by side like cal
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* No room on top: the tabs keep a blank row under them. Left, like the other tabs */
 #calendar {
     height: auto;
-    align-horizontal: center;
-    padding: 1 0;
+    padding: 0 4 1 4;
 }
 
 #calendar-body {
@@ -158,7 +149,7 @@ MonthView > .month--today {
 
 #weather {
     height: auto;
-    padding: 1 4;
+    padding: 0 4 1 4;
 }
 
 #weather-city-row {
@@ -227,7 +218,7 @@ MonthView > .month--today {
 
 #ip {
     height: auto;
-    padding: 1 4;
+    padding: 0 4 1 4;
     color: $fg;
 }
 

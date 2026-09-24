@@ -15,7 +15,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         nargs="?",
         choices=list(MODES),
         default=DEFAULT_MODE,
-        help=f"what to open (default: {DEFAULT_MODE})",
+        help=f"the tab to open on (default: {DEFAULT_MODE})",
     )
     args = parser.parse_args(argv)
     start("outils", lambda: OutilsApp(args.mode))

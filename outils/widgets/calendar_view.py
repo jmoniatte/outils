@@ -13,7 +13,7 @@ from .month_view import MonthView
 
 
 class CalendarView(Vertical, can_focus=True):
-    """Several months side by side, the one in focus in the middle, under Previous, Today and Next.
+    """Several months side by side, the one in focus first, under Previous, Today and Next.
 
     before and after say how many months flank the one in focus. It starts on today's month.
     """
@@ -23,7 +23,7 @@ class CalendarView(Vertical, can_focus=True):
         Binding("right", "shift(1)", "Next month", key_display="→", group=ACTIONS),
     ]
 
-    def __init__(self, config: Config, today: date | None = None, before: int = 1, after: int = 1) -> None:
+    def __init__(self, config: Config, today: date | None = None, before: int = 0, after: int = 1) -> None:
         super().__init__(id="calendar")
         self.today = today or date.today()
         self.first_weekday = config.week_start
@@ -54,14 +54,13 @@ class CalendarView(Vertical, can_focus=True):
 
     def on_mount(self) -> None:
         self._update_today_button()
-        self.focus()
 
     def months(self) -> list[tuple[int, int]]:
         """The (year, month) shown, left to right."""
         return [shift_month(self.year, self.month, delta) for delta in range(-self.before, self.after + 1)]
 
     def show_month(self, year: int, month: int) -> None:
-        """Put that month in the middle, and its neighbours around it."""
+        """Put that month in focus, and its neighbours around it."""
         self.year, self.month = year, month
         for view, (shown_year, shown_month) in zip(self.query(MonthView), self.months()):
             view.show(shown_year, shown_month)
@@ -72,9 +71,9 @@ class CalendarView(Vertical, can_focus=True):
         self.show_month(*shift_month(self.year, self.month, delta))
 
     def _update_today_button(self) -> None:
-        # Nothing to go back to while today's month is the one in the middle; hidden, not removed,
+        # Nothing to go back to while today's month is on show; hidden, not removed,
         # so it keeps its place and the other buttons do not move
-        self.query_one("#btn-today", Button).visible = (self.year, self.month) != (self.today.year, self.today.month)
+        self.query_one("#btn-today", Button).visible = (self.today.year, self.today.month) not in self.months()
 
     @on(Button.Pressed, "#btn-previous")
     def _previous(self, event: Button.Pressed) -> None:

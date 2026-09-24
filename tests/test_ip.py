@@ -116,8 +116,8 @@ class IpViewTest(unittest.TestCase):
             with patch("outils.widgets.ip_view.fetch", return_value=ANSWER):
                 async with app.run_test() as pilot:
                     await pilot.pause()
-                    self.assertEqual(app.query_one("#mode-name").render().plain, "IP")
-                    self.assertEqual(len(app.query(IpView)), 1)
+                    self.assertEqual(app.mode, "ip")
+                    self.assertTrue(app.query_one(IpView).asked)
 
         asyncio.run(main())
 
