@@ -218,7 +218,9 @@ the grid after a resize; `r` starts a new one at once. The live cells are green,
 the first row inside the wall, its last with the last): on top, the state in its color (Ready
 blue, Paused yellow, Game over red, You win! green; nothing while a game runs) and "Press Space"
 whenever the game is not running; at the bottom, "New best!" when the game just set it, the best
-score, then the score. The lines that
+score, then the score, colored by how close it is to the best (`score_level`): red under half,
+orange to three quarters, yellow to the best, blue from the best on (and when there is no best
+yet). The lines that
 come and go are hidden with `visible`, so the others keep their places. Nothing is written on
 the board once a game has started, so a screenshot shows it whole. Before a game, the board holds
 the splash screen (`SnakeBoard._splash`): a snake shaped like an S, in board cells, its tail back

@@ -43,6 +43,16 @@ SPLASH_FOOD = (9, 4)
 SPLASH_SIZE = (12, 5)
 # What the column right of the board says in each state; the class gives its color
 STATES = {READY: "Ready", PLAYING: "", PAUSED: "Paused", OVER: "Game over"}
+# How close the score is to the best, as its class, from the highest share of the best reached
+SCORE_LEVELS = ((1, "-record"), (0.75, "-close"), (0.5, "-half"), (0, "-low"))
+
+
+def score_level(score: int, best: int) -> str:
+    """Red under half the best, orange to three quarters, yellow to the best, blue from there on;
+    blue too with no best yet, as every point is then a record."""
+    if best == 0:
+        return "-record"
+    return next(name for share, name in SCORE_LEVELS if score >= share * best)
 
 
 class SnakeView(Horizontal, can_focus=True):
@@ -164,7 +174,11 @@ class SnakeView(Horizontal, can_focus=True):
         state.update("You win!" if won else STATES[self.state])
         for name in (*STATES, "won"):
             state.set_class(name == ("won" if won else self.state), f"-{name}")
-        self.query_one("#snake-score", Static).update(f"Score {self.game.score}")
+        score = self.query_one("#snake-score", Static)
+        score.update(f"Score {self.game.score}")
+        level = score_level(self.game.score, self.best)
+        for _, name in SCORE_LEVELS:
+            score.set_class(name == level, name)
         self.query_one("#snake-best", Static).update(f"Best {self.best}")
         # Hidden, not removed, so the lines under them keep their places
         new_best = self.state == OVER and self.game.score > 0 and self.game.score == self.best

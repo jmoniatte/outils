@@ -456,9 +456,25 @@ LookupBox.-found {
     color: $red;
 }
 
+/* How close the score is to the best: red, orange, yellow, then blue once it is a record */
 #snake-score {
-    color: $fg;
     text-style: bold;
+}
+
+#snake-score.-low {
+    color: $red;
+}
+
+#snake-score.-half {
+    color: $orange;
+}
+
+#snake-score.-close {
+    color: $yellow;
+}
+
+#snake-score.-record {
+    color: $blue;
 }
 
 #snake-best {

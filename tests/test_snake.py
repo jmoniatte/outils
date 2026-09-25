@@ -11,7 +11,7 @@ from outils.app import OutilsApp, load_stylesheet
 from outils.config import Config
 from outils.snake import DOWN, LEFT, RIGHT, UP, Game, read_best, save_best
 from outils.widgets import SnakeView
-from outils.widgets.snake_view import OVER, PAUSED, PLAYING, READY, SnakeBoard
+from outils.widgets.snake_view import OVER, PAUSED, PLAYING, READY, SnakeBoard, score_level
 from ouikit.theme import load_palette
 
 
@@ -86,6 +86,11 @@ class GameTest(unittest.TestCase):
             self.assertEqual(read_best(path), 12)
             path.write_text("oops")
             self.assertEqual(read_best(path), 0)
+
+    def test_the_score_level_by_its_share_of_the_best(self):
+        levels = [score_level(score, 10) for score in (0, 4, 5, 7, 8, 9, 10, 12)]
+        self.assertEqual(levels, ["-low", "-low", "-half", "-half", "-close", "-close", "-record", "-record"])
+        self.assertEqual([score_level(0, 0), score_level(3, 0)], ["-record", "-record"])
 
 
 class Host(App):
@@ -206,11 +211,17 @@ class SnakeViewTest(unittest.TestCase):
             # The board is left whole, for a screenshot
             self.assertEqual({line.strip("█▄▀ ") for line in board(app)}, {""})
             self.assertEqual(read_best(self.best_file), 7)
+            # The score in blue: it set the record
+            palette = load_palette("onedark")
+            score = app.query_one("#snake-score")
+            self.assertEqual(score.styles.color.hex.lower(), palette["blue"].lower())
             # Space goes back to the splash screen with a new board, and space again starts it
             await pilot.press("space")
             self.assertEqual((view.state, view.game.score, view.game.crash), (READY, 0, None))
             self.assertIn("S N A K E", "".join(board(app)))
             self.assertEqual(side(app), ["Ready", "Press Space", "Best 7", "Score 0"])
+            # A new game starts at nothing of the best: red
+            self.assertEqual(score.styles.color.hex.lower(), palette["red"].lower())
             await pilot.press("space")
             self.assertEqual(view.state, PLAYING)
             # r starts a new game at once, from any state
