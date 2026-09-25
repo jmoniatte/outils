@@ -395,6 +395,100 @@ LookupBox.-found {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   DROPBOX - Start or Stop, then the files that changed last
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#dropbox {
+    height: 1fr;
+    padding: 0 4 1 4;
+}
+
+/* Over the list, lined up with its right edge */
+#dropbox-row {
+    height: 1;
+    margin-bottom: 1;
+    align-horizontal: right;
+}
+
+#dropbox-state {
+    width: auto;
+}
+
+#dropbox-state.-starting {
+    color: $green;
+}
+
+#dropbox-state.-stopping,
+#dropbox-state.-missing {
+    color: $red;
+}
+
+/* Red to stop, green to start, like "Stopping..." and "Starting..." */
+#btn-dropbox-toggle {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    border: none;
+    padding: 0 2;
+    background: $red 30%;
+    color: $red;
+}
+
+#btn-dropbox-toggle:hover {
+    background: $red 50%;
+}
+
+#btn-dropbox-toggle.-start {
+    background: $green 30%;
+    color: $green;
+}
+
+#btn-dropbox-toggle.-start:hover {
+    background: $green 50%;
+}
+
+/* A thin scrollbar, only when the files do not all fit */
+#dropbox-scroll {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+    scrollbar-background: $bg;
+    scrollbar-background-hover: $bg;
+    scrollbar-background-active: $bg;
+    scrollbar-color: $gutter;
+    scrollbar-color-hover: $comment;
+    scrollbar-color-active: $comment;
+}
+
+/* A row per file; the scroll above holds it */
+#dropbox-files {
+    height: auto;
+    color: $fg;
+}
+
+#dropbox-files > .dropbox--age {
+    color: $green;
+}
+
+/* Dimmer than the file name, so it stands out, but easy to read */
+#dropbox-files > .dropbox--folder {
+    color: $fg 60%;
+}
+
+/* What the row is about */
+#dropbox-files > .dropbox--name {
+    text-style: bold;
+}
+
+/* Like flotte's tables: the selected row, under the mouse or the arrows, keeps its colors */
+#dropbox-files > .dropbox--cursor {
+    background: $bg-light;
+}
+
+#dropbox-files > .dropbox--message {
+    color: $comment;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    LIFE - Conway's Game of Life, filling the tab
    ═══════════════════════════════════════════════════════════════════════ */
 

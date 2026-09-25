@@ -24,6 +24,9 @@ class AppTest(unittest.TestCase):
                 # The modes that ask a service get no answer: the tests never reach the network
                 patch("outils.widgets.weather_view.forecast", side_effect=WeatherError("offline")) as self.forecast,
                 patch("outils.widgets.ip_view.fetch", side_effect=IpInfoError("offline")) as self.fetch,
+                # Nor the Dropbox client on this computer
+                patch("outils.widgets.dropbox_view.status", return_value="Up to date"),
+                patch("outils.widgets.dropbox_view.recent", return_value=[]),
             ):
                 app = OutilsApp(mode, config or Config(theme="onedark"))
                 async with app.run_test(size=(80, 24)) as pilot:
@@ -33,11 +36,11 @@ class AppTest(unittest.TestCase):
         asyncio.run(main())
 
     def test_opens_on_the_mode_named_and_tab_moves_to_the_next(self):
-        for mode in ("calendar", "time", "weather", "ip", "life", "snake"):
+        for mode in ("calendar", "time", "weather", "ip", "dropbox", "life", "snake"):
             async def body(app, pilot, mode=mode):
                 tabs = app.query_one("#modes", TabbedContent)
                 self.assertEqual(app.query_one("#app-title").render().plain, "outils")
-                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Life", "Snake"])
+                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "dropbox", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Dropbox", "Life", "Snake"])
                 self.assertEqual(app.mode, mode)
 
             with self.subTest(mode=mode):
@@ -48,13 +51,13 @@ class AppTest(unittest.TestCase):
             self.assertEqual((self.forecast.call_count, self.fetch.call_count), (0, 0))
             self.assertIsInstance(app.focused, CalendarView)
             shown = []
-            for _ in range(7):
+            for _ in range(8):
                 await pilot.press("tab")
                 await pilot.pause()
                 shown.append((app.mode, app.focused))
-            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "life", "snake", "calendar", "time"])
-            # The calendar, Life and Snake keep focus for their keys; nothing else takes it, so ?, t and q work
-            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "LifeView", "SnakeView", "CalendarView", "NoneType"])
+            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "dropbox", "life", "snake", "calendar", "time"])
+            # The calendar, Dropbox, Life and Snake keep focus for their keys; nothing else takes it, so ?, t and q work
+            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "DropboxView", "LifeView", "SnakeView", "CalendarView", "NoneType"])
             await app.workers.wait_for_complete()
             self.assertEqual((self.forecast.call_count, self.fetch.call_count), (1, 1))
             # Help lists the keys of the mode on show, and tab does not switch under it
@@ -134,7 +137,7 @@ class AppTest(unittest.TestCase):
         self.run_app(body, "ip")
 
     def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
-        for mode in ("calendar", "time", "weather", "ip", "life", "snake"):
+        for mode in ("calendar", "time", "weather", "ip", "dropbox", "life", "snake"):
             async def body(app, pilot):
                 footer = app.query_one("#app-footer")
                 close = app.query_one("#btn-close")

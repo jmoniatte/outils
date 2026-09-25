@@ -1,10 +1,11 @@
 # outils
 
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
-`outils weather`, `outils ip`, `outils life` or `outils snake` says which tab it opens on.
+`outils weather`, `outils ip`, `outils dropbox`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
 The calendar shows this month and the next; the time, the time now in a few places and an epoch converter; the weather
-shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default. Life, for fun,
+shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
+or stops the Dropbox client on this computer and shows the files that changed last. Life, for fun,
 runs Conway's Game of Life, and Snake is the game of snake.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
@@ -29,6 +30,7 @@ outils            # the calendar
 outils time
 outils weather
 outils ip
+outils dropbox
 outils life
 outils snake
 ```
@@ -65,8 +67,9 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     life.py             # The Game of Life's rules on a grid that wraps around; no Textual
     snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
-    widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py, life_view.py,
-                        # snake_view.py);
+    dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
+    widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py,
+                        # dropbox_view.py, life_view.py, snake_view.py);
                         # month_view.py draws one month, clocks_view.py the time tab's clocks;
                         # lookup_box.py is the box the time, weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
@@ -78,7 +81,7 @@ Each mode is a tab of the `#modes` `TabbedContent`, under the header; the comman
 one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
 the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
 The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
-can take it (the calendar, for its arrows, Life, for `r`, and Snake, for its keys) and clears it otherwise, so a hidden view never keeps
+can take it (the calendar, for its arrows, Dropbox, for its list, Life, for `r`, and Snake, for its keys) and clears it otherwise, so a hidden view never keeps
 it. A view must not focus itself: `TabbedContent` switches to the tab of whatever has focus.
 Weather and IP ask their service the first time their tab shows (`on_show`), so opening the
 calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
@@ -91,9 +94,10 @@ the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlin
 every link: "Weather data by open-meteo.com"
 (its CC BY 4.0 license asks for it) and "IP data by ipinfo.io". A view with a `footnote`
 instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
-September 24, 2026"). Time, Life and Snake have neither, so the line is hidden there.
+September 24, 2026"). Time, Dropbox, Life and Snake have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
-`weather_view.forecast` and `ip_view.fetch` so no mode reaches the network.
+`weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
+`dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder.
 `MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
 the first one is the default. Help lists the view's own `BINDINGS` (`HELP_BINDINGS` is set when
 its tab shows) before the app's. A new mode is a view in `widgets/` and an entry in `MODES`;
@@ -200,6 +204,34 @@ system's search domain is not tried (a wildcard there answers for any name). A p
 reserved address is refused before any request: ipinfo.io only answers `bogon` for it. Failures
 raise `IpInfoError`, shown in red in place of the details and, unlike the other tabs, not in the header. ipinfo.io limits unauthenticated requests
 per day, far above what opening a pop-up uses.
+
+## Dropbox
+
+`DropboxView` starts or stops the Dropbox client on this computer, with a button over the right
+end of the list, and shows the files that changed last in the Dropbox folder. It uses only the `dropbox` command (`dropbox.py`, with
+subprocess), which talks to the local daemon: no account and no network. It has no history of
+what synced, so the files are the `RECENT` (20) with the latest modified times under the folder
+(`~/.dropbox/info.json` names it, `~/Dropbox` by default), skipping the client's `.dropbox` and
+`.dropbox.cache`. A downloaded file keeps the time it was changed elsewhere, not when it synced.
+
+Over the list, on the right, a button that names what it acts on: Stop Dropbox (red) while the client
+runs, Start Dropbox (green) while it is stopped, as `dropbox status` tells. Its tooltip says what it
+does: stop quits the whole app, it does not pause, so nothing syncs until it starts again. It runs
+`dropbox stop` or `dropbox start` in a worker; meanwhile "Starting..." (green) or "Stopping..."
+(red) takes the button's place (`#dropbox-state`, hidden otherwise). A failure goes to the
+header. `dropbox stop` only asks the daemon to quit and returns at once, while `dropbox status`
+still answers for a few seconds, so `dropbox.stop` waits until it says not running
+(`STOP_TIMEOUT`). `dropbox start` gets no pipes, since the daemon it launches would hold them open and the
+call would never return. With no `dropbox` command, a red line says so in place of the button.
+The view asks every `POLL` seconds, only while its tab shows (`on_show` and `on_hide`).
+
+`RecentFiles` shows a row per file: how long ago (`epoch.relative`), then its path, the folder dimmer than
+the file name (`$fg 60%`), which is bold; a path too long for the row loses its start, so the file's own name stays. As in flotte's
+tables, one row is selected, shaded with its colors kept: `↑` and `↓` move it, and so does the
+mouse, over a row (it stays when the mouse leaves). It stays on the same file as new ones come in.
+Enter or a single click opens the file with `xdg-open` (`dropbox.open_file`); `ALLOW_SELECT` is
+off, or a double click would select the text of every row. When they do not all fit, the list
+scrolls (`#dropbox-scroll`, with a thin scrollbar), and `↑` and `↓` keep the selected row in sight.
 
 ## Life
 
