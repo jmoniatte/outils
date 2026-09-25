@@ -169,7 +169,10 @@ or "ME" would find Multnomah County. A place's own label ("Portland, Maine, Unit
 the box shows it, finds that place again, so Enter on an untouched box is harmless. The result is cached in
 `~/.cache/outils/places.json` (`XDG_CACHE_HOME` respected), keyed by the location text, so opening
 the pop-up costs one request. `units` is `metric` (the default) or `imperial`, passed to
-Open-Meteo, which converts.
+Open-Meteo, which converts. °C and °F, right of the City box (`#weather-units`, buttons that
+cannot take focus), switch them, the one in use in bold blue: the place on show is asked again
+in the other units (`ForecastView.location`), and `WeatherView.UnitsChanged` has the app write
+`units:` to `config.yaml` (`config.save_units`, which leaves the rest of the file as it was).
 
 `ForecastView` shows the place, the weather now (icon, temperature, words, then feels like,
 wind, humidity and rain), then one row per day for `weather.DAYS` days, today first and the

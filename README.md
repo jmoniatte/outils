@@ -16,7 +16,8 @@ timestamp to a date, or a date to a timestamp: click it, type `1790222400` (seco
 The weather shows the conditions now and a row per day for a week, from
 [Open-Meteo](https://open-meteo.com) (free, no account). It opens on your `location` (Portland, OR
 unless you set one, see below); the place found shows in the City box, in blue. Click the box, type
-another place and press Enter to look it up, or Escape to leave the box.
+another place and press Enter to look it up, or Escape to leave the box. **°C** and **°F**, next
+to the box, switch the units (wind and rain too); the one in use is blue, and the choice is saved.
 The weather icons need a [Nerd Font](https://www.nerdfonts.com).
 
 The IP mode shows the public (WAN) address this computer reaches the internet from, with what
@@ -61,7 +62,7 @@ Nothing is required. Press `t` to browse the themes: each one applies as the cur
 theme: one-light
 week_start: sunday       # the calendar's first column; monday by default
 location: Victoria, BC   # where the weather opens; Portland, OR by default
-units: imperial          # metric by default
+units: imperial          # metric by default; °C and °F on the Weather tab set it
 clocks:                  # the Time tab, top to bottom: a name, then its time zone
   Home: America/Vancouver
   UTC: UTC

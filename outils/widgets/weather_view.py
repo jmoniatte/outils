@@ -7,10 +7,10 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Input, Static
+from textual.widgets import Button, Input, Static
 
 from ..config import Config
-from ..weather import UNIT_LABELS, Forecast, Place, WeatherError, describe, forecast
+from ..weather import IMPERIAL, METRIC, UNIT_LABELS, Forecast, Place, WeatherError, describe, forecast
 from .lookup_box import LookupBox
 
 # The day's label, its icon and words, then its high and low, its chance of rain and how much
@@ -25,8 +25,15 @@ class WeatherView(Vertical):
     Once found, the place shows in the box in full and in blue ("Portland, Oregon, United
     States"), so the box says both what to type and where the forecast is for. The box only has
     focus once clicked, so ?, t and q keep working until then, and it lets go after Enter, or
-    Escape.
+    Escape. °C and °F beside the box switch the units, the one in use in blue.
     """
+
+    class UnitsChanged(Message):
+        """°C or °F was picked; the app saves it to the config."""
+
+        def __init__(self, units: str) -> None:
+            super().__init__()
+            self.units = units
 
     # Shown at the bottom right, over the footer's rule: the words, then the link. Open-Meteo's
     # data is CC BY 4.0, which asks for it
@@ -42,7 +49,35 @@ class WeatherView(Vertical):
         with Horizontal(classes="lookup-row"):
             yield Static("City", classes="lookup-label")
             yield LookupBox(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
+            with Horizontal(id="weather-units"):
+                for units, label in ((METRIC, "°C"), (IMPERIAL, "°F")):
+                    button = Button(label, id=f"units-{units}")
+                    button.can_focus = False  # A click must not pull focus, as on the calendar's buttons
+                    button.active_effect_duration = 0
+                    yield button
         yield ForecastView(self.config.units, self.today)
+
+    def on_mount(self) -> None:
+        self._show_units()
+
+    def _show_units(self) -> None:
+        for units in (METRIC, IMPERIAL):
+            self.query_one(f"#units-{units}", Button).set_class(units == self.config.units, "-selected")
+
+    @on(Button.Pressed, "#weather-units Button")
+    def _units_pressed(self, event: Button.Pressed) -> None:
+        event.stop()
+        units = event.button.id.removeprefix("units-")
+        if units == self.config.units:
+            return
+        self.config.units = units
+        self._show_units()
+        forecast_view = self.query_one(ForecastView)
+        forecast_view.units = units
+        # Open-Meteo converts: the place on show, asked again in the other units
+        if self.asked:
+            forecast_view.load(forecast_view.location)
+        self.post_message(self.UnitsChanged(units))
 
     def on_show(self) -> None:
         # Asked the first time its tab shows, so opening another tab costs no request
@@ -90,10 +125,13 @@ class ForecastView(Widget):
         self.today = today or date.today()
         self.forecast: Forecast | None = None
         self.message = ""
+        # What was last asked for, so a change of units asks for it again
+        self.location = ""
 
     @work(exclusive=True)
     async def load(self, location: str) -> None:
         """Ask Open-Meteo for location, keeping what is on show until the answer comes."""
+        self.location = location
         if self.forecast is None:
             self.message = f"Asking Open-Meteo for the weather in {location}..."
             self.refresh(layout=True)

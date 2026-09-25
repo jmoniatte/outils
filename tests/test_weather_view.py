@@ -1,6 +1,8 @@
 import asyncio
+import tempfile
 import unittest
 from datetime import date
+from pathlib import Path
 from unittest.mock import patch
 
 from textual.app import App, ComposeResult
@@ -8,7 +10,7 @@ from textual.widgets import Input
 
 from outils.app import OutilsApp, load_stylesheet
 from outils.config import Config
-from outils.weather import METRIC, WeatherError, parse_forecast
+from outils.weather import IMPERIAL, METRIC, WeatherError, parse_forecast
 from outils.widgets import WeatherView
 from outils.widgets.weather_view import ForecastView
 from ouikit.theme import load_palette
@@ -107,6 +109,27 @@ class WeatherViewTest(unittest.TestCase):
 
         self.run_view(Config(), body, return_value=VICTORIA)
 
+    def test_c_and_f_switch_the_units_the_one_in_use_in_blue(self):
+        async def body(app, pilot, fetch):
+            celsius, fahrenheit = app.query_one("#units-metric"), app.query_one("#units-imperial")
+            blue = app.get_css_variables()["blue"].lower()
+            self.assertTrue(celsius.has_class("-selected"))
+            self.assertEqual(celsius.styles.color.hex.lower(), blue)
+            self.assertNotEqual(fahrenheit.styles.color.hex.lower(), blue)
+            await pilot.click("#units-imperial")
+            await settle(app, pilot)
+            # The same place asked again, in the other units, and the box keeps it
+            self.assertEqual(fetch.call_args_list[-1].args, ("Victoria, BC", IMPERIAL))
+            self.assertEqual((celsius.has_class("-selected"), fahrenheit.has_class("-selected")), (False, True))
+            self.assertIn("°F", shown(app)[0])
+            self.assertIsNone(app.focused)
+            # The one in use asks nothing
+            await pilot.click("#units-imperial")
+            await settle(app, pilot)
+            self.assertEqual(fetch.call_count, 2)
+
+        self.run_view(Config(location="Victoria, BC"), body, side_effect=lambda location, units: parse_forecast(PLACE, units, FORECAST))
+
     def test_an_error_shows_in_the_view_and_the_header(self):
         async def body(app, pilot, fetch):
             self.assertEqual(shown(app), ["Cannot reach Open-Meteo: no network"])
@@ -128,6 +151,21 @@ class WeatherModeTest(unittest.TestCase):
                     await pilot.press("question_mark")
                     await pilot.pause()
                     self.assertEqual(type(app.screen).__name__, "HelpScreen")
+
+        asyncio.run(main())
+
+    def test_the_units_picked_are_saved_to_the_config(self):
+        async def main():
+            with tempfile.TemporaryDirectory() as tmp:
+                config_file = Path(tmp) / "config.yaml"
+                config_file.write_text("theme: onedark\nlocation: Victoria, BC\n")
+                app = OutilsApp("weather", Config(theme="onedark"))
+                with patch("outils.widgets.weather_view.forecast", return_value=VICTORIA), patch("outils.app.CONFIG_FILE", config_file):
+                    async with app.run_test(size=(90, 24)) as pilot:
+                        await settle(app, pilot)
+                        await pilot.click("#units-imperial")
+                        await settle(app, pilot)
+                self.assertEqual(config_file.read_text(), "theme: onedark\nlocation: Victoria, BC\nunits: imperial\n")
 
         asyncio.run(main())
 

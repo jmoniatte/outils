@@ -12,7 +12,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
 from . import REPOSITORY_URL, __version__
-from .config import CONFIG_FILE, Config, load_config
+from .config import CONFIG_FILE, Config, load_config, save_units
 from .widgets import CalendarView, IpView, LifeView, TimeView, WeatherView
 
 STYLES_DIR = Path(__file__).parent / "styles"
@@ -91,6 +91,9 @@ class OutilsApp(BaseApp):
         self._show_mode(self.query_one("#modes", TabbedContent).active_pane)
         for warning in self.config.warnings:
             self.notify(warning, severity="warning", timeout=10)
+
+    def on_weather_view_units_changed(self, event: WeatherView.UnitsChanged) -> None:
+        save_units(event.units, CONFIG_FILE)
 
     def action_next_mode(self) -> None:
         if len(self.screen_stack) > 1:

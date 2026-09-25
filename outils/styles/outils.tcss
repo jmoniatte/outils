@@ -301,6 +301,33 @@ LookupBox.-found {
     padding: 0 4 1 4;
 }
 
+/* °C and °F on the city's row: the one in use in blue, the other grey until hovered */
+#weather-units {
+    width: auto;
+    height: 1;
+    margin-left: 2;
+}
+
+#weather-units Button {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    border: none;
+    padding: 0;
+    margin-left: 1;
+    background: transparent;
+    color: $comment;
+}
+
+#weather-units Button:hover {
+    color: $fg;
+}
+
+#weather-units Button.-selected {
+    color: $blue;
+    text-style: bold;
+}
+
 #forecast {
     height: auto;
     color: $fg;

@@ -1,3 +1,4 @@
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,7 @@ from .weather import METRIC, UNITS
 
 CONFIG_DIR = Path.home() / ".config" / "outils"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
+_UNITS_LINE = re.compile(r"^units:.*$", re.MULTILINE)
 
 
 @dataclass
@@ -55,6 +57,17 @@ def load_config(path: Path = CONFIG_FILE) -> Config:
     _read_weather(data, config)
     _read_clocks(data.get("clocks"), config)
     return config
+
+
+def save_units(units: str, path: Path = CONFIG_FILE) -> None:
+    """Persist the units, leaving the rest of a hand-written config untouched."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = f"units: {units}"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    updated, replaced = _UNITS_LINE.subn(line, text, count=1)
+    if not replaced:
+        updated = f"{text.rstrip()}\n{line}\n" if text.strip() else f"{line}\n"
+    path.write_text(updated, encoding="utf-8")
 
 
 def _clocks(zones: Mapping[str, str]) -> list[Clock]:

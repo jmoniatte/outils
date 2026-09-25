@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from outils.config import Config, load_config
+from outils.config import Config, load_config, save_units
 
 
 class LoadConfigTest(unittest.TestCase):
@@ -53,6 +53,21 @@ class WeatherConfigTest(unittest.TestCase):
         self.assertEqual((wrong.location, wrong.units), ("Portland, OR", "metric"))
         self.assertEqual(len(wrong.warnings), 2)
         self.assertIn("kelvin", wrong.warnings[1])
+
+
+class SaveUnitsTest(unittest.TestCase):
+    def test_replaces_the_units_line_or_adds_one_and_keeps_the_rest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "outils" / "config.yaml"
+            save_units("imperial", path)
+            self.assertEqual(path.read_text(), "units: imperial\n")
+            path.write_text("theme: nord  # mine\nunits: imperial\nweek_start: sunday")
+            save_units("metric", path)
+            self.assertEqual(path.read_text(), "theme: nord  # mine\nunits: metric\nweek_start: sunday")
+            path.write_text("theme: nord")
+            save_units("metric", path)
+            self.assertEqual(path.read_text(), "theme: nord\nunits: metric\n")
+            self.assertEqual(load_config(path).units, "metric")
 
 
 class ClocksConfigTest(unittest.TestCase):

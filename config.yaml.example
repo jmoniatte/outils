@@ -21,5 +21,6 @@ clocks:
 # the name is shared (Portland, ME; Paris, France). Looked up once through Open-Meteo, then cached.
 location: Portland, OR
 
-# metric (°C, km/h, mm; the default) or imperial (°F, mph, in)
+# metric (°C, km/h, mm; the default) or imperial (°F, mph, in). °C and °F on the Weather tab
+# switch it and save the choice here.
 units: metric
