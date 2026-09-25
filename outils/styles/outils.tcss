@@ -495,8 +495,9 @@ LookupBox.-found {
     color: $red;
 }
 
+/* The splash screen's title, yellow like the head */
 #snake-board > .snake--title {
-    color: $green;
+    color: $yellow;
     text-style: bold;
 }
 

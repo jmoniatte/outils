@@ -221,7 +221,9 @@ whenever the game is not running; at the bottom, "New best!" when the game just 
 score, then the score. The lines that
 come and go are hidden with `visible`, so the others keep their places. Nothing is written on
 the board once a game has started, so a screenshot shows it whole. Before a game, the board holds
-only the title, "S N A K E".
+the splash screen (`SnakeBoard._splash`): a snake shaped like an S, in board cells, its tail back
+to the left wall and its yellow head top right, "S N A K E" in yellow right of it and the red food
+under the title. A board smaller than `SPLASH_SIZE` gets the title alone.
 
 The board is as tall as the tab allows and at most `SHAPE` (4:3) as wide, as snake boards
 usually are: `SnakeView.on_resize` sets its width. A cell is two characters wide and one tall

@@ -170,6 +170,28 @@ class SnakeViewTest(unittest.TestCase):
 
         self.run_view(body)
 
+    def test_the_splash_screen_is_a_snake_shaped_like_an_s_with_the_title_and_the_food(self):
+        async def body(app, pilot, view):
+            text = app.query_one(SnakeBoard).render()
+            lines = text.plain.split("\n")
+            width = len(lines[0]) + 1
+            palette = load_palette("onedark")
+
+            def color(x, row):
+                style = next(span.style for span in text.spans if span.start <= row * width + x < span.end)
+                return style.color.triplet.hex.lower()
+
+            # 17 by 13 cells: the 12 by 5 picture sits 2 cells in and 4 down, its tail back to the wall
+            self.assertEqual(lines[9], "█" * 17 + " " * 6 + "██" + " " * 10 + "█")
+            self.assertEqual(lines[7].rstrip(" █"), "█      ██████████  S N A K E")
+            self.assertEqual(color(1, 9), palette["green"].lower())
+            # The head, yellow, ends the S top right; the food, red, is under the title
+            self.assertEqual(color(21, 6), palette["yellow"].lower())
+            self.assertEqual(color(23, 9), palette["red"].lower())
+            self.assertEqual(color(19, 7), palette["yellow"].lower())
+
+        self.run_view(body)
+
     def test_the_game_ends_at_a_wall_keeps_the_best_and_r_restarts(self):
         async def body(app, pilot, view):
             view.game.snake.clear()

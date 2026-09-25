@@ -28,6 +28,19 @@ FASTEST_DELAY = 0.07
 SPEEDUP = 0.002
 
 TITLE = "S N A K E"
+# The splash screen, in board cells: a snake shaped like an S, from its tail to its head, then
+# the title right of it and the food under the title; the tail reaches back to the left wall
+SPLASH_SNAKE = [
+    *[(x, 4) for x in range(6)],
+    (5, 3),
+    *[(x, 2) for x in range(5, 0, -1)],
+    (1, 1),
+    *[(x, 0) for x in range(1, 9)],
+    (8, 1),
+]
+SPLASH_TITLE = (7, 2)
+SPLASH_FOOD = (9, 4)
+SPLASH_SIZE = (12, 5)
 # What the column right of the board says in each state; the class gives its color
 STATES = {READY: "Ready", PLAYING: "", PAUSED: "Paused", OVER: "Game over"}
 
@@ -206,6 +219,28 @@ class SnakeBoard(Widget):
     def _style(self, name: str) -> Style:
         return self.get_component_rich_style(f"snake--{name}")
 
+    def _splash(self, game: Game, put, fill, right: int, bottom: int) -> None:
+        """The S-shaped snake, the title and the food, or the title alone on a board too small."""
+        columns, rows = SPLASH_SIZE
+        if game.width < columns or game.height < rows:
+            row, start = bottom // 2, max(1, (1 + right - len(TITLE)) // 2)
+            for index, char in enumerate(TITLE[: right - start]):
+                put(start + index, row, char, "title")
+            return
+        # In the middle, its tail stretched back to the left wall, like a snake coming in
+        left, top = (game.width - columns) // 2, (game.height - rows) // 2
+        tail = SPLASH_SNAKE[0]
+        for x in range(-left, tail[0]):
+            fill((left + x, top + tail[1]), "body")
+        for x, y in SPLASH_SNAKE[:-1]:
+            fill((left + x, top + y), "body")
+        head = SPLASH_SNAKE[-1]
+        fill((left + head[0], top + head[1]), "head")
+        fill((left + SPLASH_FOOD[0], top + SPLASH_FOOD[1]), "food")
+        x, y = SPLASH_TITLE
+        for index, char in enumerate(TITLE):
+            put(CELL * (left + x) + 1 + index, top + y + 1, char, "title")
+
     def render(self) -> Text:
         view = self.parent
         if not isinstance(view, SnakeView):
@@ -245,11 +280,9 @@ class SnakeBoard(Widget):
                 fill(game.food, "food")
         if game.crash is not None:
             fill(game.crash, "crash")
-        # The title on the empty board before the first game; nothing once one has started
+        # The splash screen on the empty board before the first game; nothing once one has started
         if view.state == READY:
-            row, start = bottom // 2, max(1, (1 + right - len(TITLE)) // 2)
-            for index, char in enumerate(TITLE[: right - start]):
-                put(start + index, row, char, "title")
+            self._splash(game, put, fill, right, bottom)
         text = Text(no_wrap=True, overflow="crop")
         for row, chars in enumerate(grid):
             if row:
