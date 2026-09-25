@@ -281,3 +281,16 @@ LookupBox.-found {
 #ip-details > .ip--error {
     color: $red;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIFE - Conway's Game of Life, filling the tab
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#life {
+    height: 1fr;
+    margin: 0 4 1 4;
+}
+
+#life > .life--cell {
+    color: $green;
+}

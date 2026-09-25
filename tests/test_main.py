@@ -22,7 +22,8 @@ class MainTest(unittest.TestCase):
             main([])
             main(["weather"])
             main(["ip"])
-        self.assertEqual([call.args for call in app.call_args_list], [("calendar",), ("weather",), ("ip",)])
+            main(["life"])
+        self.assertEqual([call.args for call in app.call_args_list], [("calendar",), ("weather",), ("ip",), ("life",)])
         self.assertEqual(start.call_args.args[0], "outils")
 
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:

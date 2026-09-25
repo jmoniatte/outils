@@ -1,10 +1,11 @@
 # outils
 
-TUI with everyday tools, one tab each: `outils calendar` (the default), `outils weather` or
-`outils ip` says which tab it opens on.
+TUI with everyday tools, one tab each: `outils calendar` (the default), `outils weather`,
+`outils ip` or `outils life` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
 The calendar shows this month and the next; the weather shows now and the next days, from Open-Meteo; the
-IP mode shows what ipinfo.io knows about an address, the public one by default.
+IP mode shows what ipinfo.io knows about an address, the public one by default. Life, for fun,
+runs Conway's Game of Life.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
@@ -56,8 +57,9 @@ outils/                 # git root + pyproject.toml (run uv commands here)
                         # location, units)
     months.py           # The month grids, shift_month and the day labels; no Textual
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
+    life.py             # The Game of Life's rules on a grid that wraps around; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
-    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py); month_view.py draws one month;
+    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py, life_view.py); month_view.py draws one month;
                         # lookup_box.py is the box the weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
 ```
@@ -68,7 +70,7 @@ Each mode is a tab of the `#modes` `TabbedContent`, under the header; the comman
 one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
 the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
 The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
-can take it (the calendar, for its arrows) and clears it otherwise, so a hidden view never keeps
+can take it (the calendar, for its arrows, and Life, for `r`) and clears it otherwise, so a hidden view never keeps
 it. A view must not focus itself: `TabbedContent` switches to the tab of whatever has focus.
 Weather and IP ask their service the first time their tab shows (`on_show`), so opening the
 calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
@@ -161,6 +163,17 @@ system's search domain is not tried (a wildcard there answers for any name). A p
 reserved address is refused before any request: ipinfo.io only answers `bogon` for it. Failures
 raise `IpInfoError`, shown in red in place of the details and, unlike the other tabs, not in the header. ipinfo.io limits unauthenticated requests
 per day, far above what opening a pop-up uses.
+
+## Life
+
+`LifeView` fills its tab with a random grid (`life.DENSITY` of the cells alive) and runs
+`life.step` `SPEED` times a second, only while its tab shows (`on_show` and `on_hide` resume and
+pause its timer). Each character holds two cells, one over the other, drawn with half blocks
+(`▀`, `▄`, `█`), so the cells come out square: an area of 56 by 14 characters is a 56 by 28
+grid. The edges wrap around, so gliders come back on the other side. A grid that repeats one of
+its last two generations (still or blinking) for `SETTLED_STEPS` is replaced by a new one, as is
+the grid after a resize; `r` starts a new one at once. The live cells are green, through the
+`life--cell` component class.
 
 ## Themes
 

@@ -1,7 +1,7 @@
 # outils
 
-Everyday tools in the terminal, one tab each: a calendar, the weather forecast and this
-computer's public IP. The calendar
+Everyday tools in the terminal, one tab each: a calendar, the weather forecast, this
+computer's public IP and, for fun, the Game of Life. The calendar
 shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once the current month is off screen, comes back to the current month.
@@ -16,6 +16,10 @@ The IP mode shows the public (WAN) address this computer reaches the internet fr
 [ipinfo.io](https://ipinfo.io) knows about it: host name, city, region, country, postal code,
 location, time zone and network. It needs no account. Click the IP box, type another address or
 a host name and press Enter to look it up; an empty box goes back to this computer's address.
+
+The Life tab runs [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life)
+on a random grid that fills the tab, its edges wrapping around. A grid that settles into still or
+blinking shapes is replaced by a new one after a few seconds; `r` starts a new one at once.
 
 ## Install
 
@@ -32,6 +36,7 @@ where its shared UI library, [ouikit](https://github.com/jmoniatte/ouikit), live
 outils            # opens on the calendar
 outils weather    # opens on the weather forecast
 outils ip         # opens on this computer's public (WAN) IP address, from ipinfo.io
+outils life       # opens on the Game of Life
 ```
 
 Each command opens on its own tab, so a status-bar block can open the one it is about. Click a

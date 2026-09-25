@@ -13,7 +13,7 @@ from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
 from . import REPOSITORY_URL, __version__
 from .config import CONFIG_FILE, Config, load_config
-from .widgets import CalendarView, IpView, WeatherView
+from .widgets import CalendarView, IpView, LifeView, WeatherView
 
 STYLES_DIR = Path(__file__).parent / "styles"
 # ouikit's stylesheets first, so the app's own rules win where they differ
@@ -23,6 +23,7 @@ MODES = {
     "calendar": ("Calendar", CalendarView),
     "weather": ("Weather", WeatherView),
     "ip": ("IP", IpView),
+    "life": ("Life", LifeView),
 }
 DEFAULT_MODE = next(iter(MODES))
 
@@ -32,7 +33,7 @@ def load_stylesheet() -> str:
 
 
 class OutilsApp(BaseApp):
-    """Everyday tools, one tab each: a calendar, the weather forecast and this computer's public IP."""
+    """Everyday tools, one tab each: a calendar, the weather forecast, this computer's public IP and the Game of Life."""
 
     TITLE = "outils"
     VERSION = __version__
@@ -60,7 +61,7 @@ class OutilsApp(BaseApp):
 
     def compose(self) -> ComposeResult:
         yield AppHeader()
-        # The panes' ids differ from their views' own (#calendar, #weather, #ip)
+        # The panes' ids differ from their views' own (#calendar, #weather, #ip, #life)
         with TabbedContent(initial=f"{self.mode}-mode", id="modes"):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):
@@ -112,7 +113,7 @@ class OutilsApp(BaseApp):
             link = self.query_one("#mode-credit-link", Link)
             link.text = url.removeprefix("https://")
             link.url = url
-        # The calendar takes focus for its arrow keys; the city box must never take it by itself
+        # The calendar and Life take focus for their keys; the city box must never take it by itself
         if view.can_focus:
             view.focus()
         else:
