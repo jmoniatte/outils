@@ -177,11 +177,18 @@ MonthView > .month--today {
     text-style: bold;
 }
 
-/* The time now in a few places, under the months */
+/* ═══════════════════════════════════════════════════════════════════════
+   TIME - the epoch converter, a rule, then the time now in a few places
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#time {
+    height: auto;
+    padding: 0 4 1 4;
+}
+
 #clocks {
     width: auto;
     height: auto;
-    margin-top: 1;
     color: $fg;
 }
 
@@ -189,12 +196,60 @@ MonthView > .month--today {
     text-style: bold;
 }
 
+/* Orange, like the weather's high temperatures */
 #clocks > .clocks--offset {
-    color: $comment;
+    color: $orange;
 }
 
 #clocks > .clocks--dst {
     color: $yellow;
+}
+
+
+/* As wide as the results' labels, so the box lines up with the values under it */
+#epoch-row .lookup-label {
+    width: 10;
+}
+
+/* Room for a timestamp in milliseconds or a date like 2026-09-24 15:30; longer text scrolls */
+#epoch-input {
+    width: 20;
+}
+
+/* Back to following now; green like the calendar's Previous and Next */
+#btn-now {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    margin-left: 2;
+    border: none;
+    padding: 0 2;
+    background: $green 30%;
+    color: $green;
+}
+
+#btn-now:hover {
+    background: $green 50%;
+}
+
+#epoch-details {
+    height: auto;
+    color: $fg;
+}
+
+/* Between the epoch and the clocks, a rule like the footer's */
+#time-rule {
+    margin: 1 0;
+    color: $gutter;
+}
+
+/* Green like the IP tab's labels */
+#epoch-details > .epoch--label {
+    color: $green;
+}
+
+#epoch-details > .epoch--error {
+    color: $red;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

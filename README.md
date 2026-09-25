@@ -1,12 +1,16 @@
 # outils
 
-Everyday tools in the terminal, one tab each: a calendar, the weather forecast, this
+Everyday tools in the terminal, one tab each: a calendar, clocks, the weather forecast, this
 computer's public IP and, for fun, the Game of Life. The calendar
 shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once the current month is off screen, comes back to the current month.
-Under the months, a few clocks give the time elsewhere, with the offset from UTC and a yellow sun
-while summer time is in force.
+
+The Time tab gives the time now in a few places, with the offset from UTC and a yellow sun while
+summer time is in force (see `clocks` below). Above the clocks, the Epoch box converts an epoch
+timestamp to a date, or a date to a timestamp: click it, type `1790222400` (seconds; 13 digits are milliseconds) or `2026-09-24 15:30` (local time, unless it ends in `Z` or an offset like
+`+02:00`) and press Enter. It shows the current time, ticking, until you use it; the green
+**Now** button next to it, or Enter on an empty box, goes back to it.
 
 The weather shows the conditions now and a row per day for a week, from
 [Open-Meteo](https://open-meteo.com) (free, no account). It opens on your `location` (Portland, OR
@@ -36,6 +40,7 @@ where its shared UI library, [ouikit](https://github.com/jmoniatte/ouikit), live
 
 ```bash
 outils            # opens on the calendar
+outils time       # opens on the clocks
 outils weather    # opens on the weather forecast
 outils ip         # opens on this computer's public (WAN) IP address, from ipinfo.io
 outils life       # opens on the Game of Life
@@ -56,7 +61,7 @@ theme: one-light
 week_start: sunday       # the calendar's first column; monday by default
 location: Victoria, BC   # where the weather opens; Portland, OR by default
 units: imperial          # metric by default
-clocks:                  # under the calendar, top to bottom: a name, then its time zone
+clocks:                  # the Time tab, top to bottom: a name, then its time zone
   Home: America/Vancouver
   UTC: UTC
   Tokyo: Asia/Tokyo

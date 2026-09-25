@@ -63,12 +63,12 @@ class ClocksViewTest(unittest.TestCase):
                         f"Strasbourg   07:04   +02:00 {DST_ICON}",
                     ],
                 )
-                # The sun in yellow, the offset before it in grey
+                # The sun in yellow, the offset before it in orange
                 text = view.render()
                 colors = {text.plain[span.start:span.end].strip(): span.style.color.triplet.hex for span in text.spans}
                 palette = load_palette("onedark")
                 self.assertEqual(colors[DST_ICON].lower(), palette["yellow"].lower())
-                self.assertEqual(colors["-07:00"].lower(), palette["comment"].lower())
+                self.assertEqual(colors["-07:00"].lower(), palette["orange"].lower())
                 now[0] = SUMMER.replace(minute=5, second=1)
                 view.tick()
                 self.assertEqual(view.render().plain.split("\n")[2], "UTC          05:05   +00:00")

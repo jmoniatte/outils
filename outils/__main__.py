@@ -8,7 +8,7 @@ from .app import DEFAULT_MODE, MODES, OutilsApp
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Everyday tools in the terminal: a calendar, the weather forecast, this computer's public IP or the Game of Life.")
+    parser = argparse.ArgumentParser(description="Everyday tools in the terminal: a calendar, clocks, the weather forecast, this computer's public IP or the Game of Life.")
     parser.add_argument("--version", action="version", version=f"outils {__version__}")
     parser.add_argument(
         "mode",

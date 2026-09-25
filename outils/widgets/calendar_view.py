@@ -9,7 +9,6 @@ from textual.widgets import Button, Static
 
 from ..config import Config
 from ..months import shift_month
-from .clocks_view import ClocksView
 from .month_view import MonthView
 
 
@@ -17,7 +16,6 @@ class CalendarView(Vertical, can_focus=True):
     """Several months side by side, the one in focus first, under Previous, Today and Next.
 
     before and after say how many months flank the one in focus. It starts on today's month.
-    Under them, the time now in the config's clocks.
     """
 
     BINDINGS = [
@@ -29,7 +27,6 @@ class CalendarView(Vertical, can_focus=True):
         super().__init__(id="calendar")
         self.today = today or date.today()
         self.first_weekday = config.week_start
-        self.clocks = config.clocks
         self.before = before
         self.after = after
         self.year = self.today.year
@@ -47,7 +44,6 @@ class CalendarView(Vertical, can_focus=True):
             with Horizontal(id="calendar-months"):
                 for year, month in self.months():
                     yield MonthView(year, month, self.first_weekday, self.today)
-            yield ClocksView(self.clocks)
 
     def _button(self, label: str, id: str) -> Button:
         button = Button(label, id=id)

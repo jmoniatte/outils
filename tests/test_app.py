@@ -33,11 +33,11 @@ class AppTest(unittest.TestCase):
         asyncio.run(main())
 
     def test_opens_on_the_mode_named_and_tab_moves_to_the_next(self):
-        for mode in ("calendar", "weather", "ip", "life"):
+        for mode in ("calendar", "time", "weather", "ip", "life"):
             async def body(app, pilot, mode=mode):
                 tabs = app.query_one("#modes", TabbedContent)
                 self.assertEqual(app.query_one("#app-title").render().plain, "outils")
-                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "weather", "ip", "life")], ["Calendar", "Weather", "IP", "Life"])
+                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "life")], ["Calendar", "Time", "Weather", "IP", "Life"])
                 self.assertEqual(app.mode, mode)
 
             with self.subTest(mode=mode):
@@ -48,13 +48,13 @@ class AppTest(unittest.TestCase):
             self.assertEqual((self.forecast.call_count, self.fetch.call_count), (0, 0))
             self.assertIsInstance(app.focused, CalendarView)
             shown = []
-            for _ in range(5):
+            for _ in range(6):
                 await pilot.press("tab")
                 await pilot.pause()
                 shown.append((app.mode, app.focused))
-            self.assertEqual([mode for mode, _ in shown], ["weather", "ip", "life", "calendar", "weather"])
+            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "life", "calendar", "time"])
             # The calendar and Life keep focus for their keys; nothing else takes it, so ?, t and q work
-            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "LifeView", "CalendarView", "NoneType"])
+            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "LifeView", "CalendarView", "NoneType"])
             await app.workers.wait_for_complete()
             self.assertEqual((self.forecast.call_count, self.fetch.call_count), (1, 1))
             # Help lists the keys of the mode on show, and tab does not switch under it
@@ -65,7 +65,7 @@ class AppTest(unittest.TestCase):
             await pilot.press("tab")
             await pilot.pause()
             self.assertIsInstance(app.screen, HelpScreen)
-            self.assertEqual(app.mode, "weather")
+            self.assertEqual(app.mode, "time")
 
         self.run_app(body)
 
@@ -95,7 +95,8 @@ class AppTest(unittest.TestCase):
             open_url.assert_called_once_with("https://ipinfo.io")
             self.assertIsNone(app.focused)
 
-        self.run_app(body)
+        # The tab before the weather, which has no credit either
+        self.run_app(body, "time")
 
     def test_a_click_on_a_tab_shows_its_mode(self):
         async def body(app, pilot):
@@ -111,7 +112,7 @@ class AppTest(unittest.TestCase):
         self.run_app(body, "ip")
 
     def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
-        for mode in ("calendar", "weather", "ip", "life"):
+        for mode in ("calendar", "time", "weather", "ip", "life"):
             async def body(app, pilot):
                 footer = app.query_one("#app-footer")
                 close = app.query_one("#btn-close")

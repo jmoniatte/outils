@@ -1,10 +1,10 @@
 # outils
 
-TUI with everyday tools, one tab each: `outils calendar` (the default), `outils weather`,
-`outils ip` or `outils life` says which tab it opens on.
+TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
+`outils weather`, `outils ip` or `outils life` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
-The calendar shows this month and the next, with the time in a few places under them; the weather shows now and the next days, from Open-Meteo; the
-IP mode shows what ipinfo.io knows about an address, the public one by default. Life, for fun,
+The calendar shows this month and the next; the time, the time now in a few places and an epoch converter; the weather
+shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default. Life, for fun,
 runs Conway's Game of Life.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
@@ -26,8 +26,10 @@ screen, and every message, errors included, goes to the header.
 
 ```bash
 outils            # the calendar
+outils time
 outils weather
 outils ip
+outils life
 ```
 
 It refuses to start unless stdin and stdout are a terminal (ouikit's `start`).
@@ -56,12 +58,14 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     config.py           # Optional ~/.config/outils/config.yaml (theme, through ouikit.config; week_start,
                         # clocks, location, units)
     clocks.py           # The time, offset and summer time in an IANA time zone; no Textual
+    epoch.py            # Epoch timestamps to dates and back; no Textual
     months.py           # The month grids, shift_month and the day labels; no Textual
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
     life.py             # The Game of Life's rules on a grid that wraps around; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
-    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py, life_view.py); month_view.py draws one month, clocks_view.py the clocks under them;
-                        # lookup_box.py is the box the weather and IP tabs type in
+    widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py, life_view.py);
+                        # month_view.py draws one month, clocks_view.py the time tab's clocks;
+                        # lookup_box.py is the box the time, weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
 ```
 
@@ -113,15 +117,32 @@ number always means past. The colors come
 from TCSS through `MonthView`'s component classes, so a theme change repaints them with no
 `apply_theme` override.
 
-Under the months, `ClocksView` shows a row per clock: its name, the time there, its offset from
-UTC and, while summer time is in force, Nerd Font's sun (the weather tab's) in yellow. The clocks are
-`clocks` in `config.yaml`, names mapped to IANA time zones in the order shown; the default is
+`week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is
+kept as calendar's number (Monday 0). An unknown day is a warning in the header and Monday.
+
+## Time
+
+`TimeView` holds an epoch converter (below) over a `ClocksView`, a row per clock: its name, the time there, its offset from
+UTC in orange (the weather's high temperature color) and, while summer time is in force, Nerd
+Font's sun (the weather tab's) in yellow. The clocks are `clocks` in `config.yaml`, names mapped to IANA time zones in the order shown; the default is
 Portland, Chicago, UTC and Strasbourg. A zone Python's `zoneinfo` does not know is a warning in
 the header and is left out. The view checks the time every second and redraws when the minute
 turns; it makes no request.
 
-`week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is
-kept as calendar's number (Monday 0). An unknown day is a warning in the header and Monday.
+On top, an Epoch box (a `LookupBox`) converts what Enter finds there; a rule (`#time-rule`) then
+separates it from the clocks. It opens on now,
+in seconds, and follows it every second (`follow_now`) until it is used: never while the box has
+focus or holds an edit, and not once something typed was converted. The green Now button beside
+the box, shown only while the box is not following now (hidden with `visible`, so it keeps its
+place), goes back to following it, as does Enter on an empty box. Now cannot take focus. Laid out like the
+IP tab, the box then turns blue (what was typed, or the seconds for an empty box) and
+`EpochDetails` shows the result a row per line, in plain text: the timestamp in seconds, the date in UTC and here, both ISO 8601 with their offset (`+00:00` for UTC), and how far it
+is from now, redrawn every second so "2 seconds ago" stays true. `epoch.parse`
+reads a number as seconds (a fraction is kept), or as milliseconds when it is 13 digits with no
+fraction (2001 to 2286; as seconds, 13 digits would be past year 33000); anything else goes to
+`datetime.fromisoformat`, and a date with no offset is local time, the system's (summer time
+included, through `astimezone`). An empty box, or `now`, is now. What is neither shows in red in
+place of the rows, as on the IP tab.
 
 ## Weather
 

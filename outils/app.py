@@ -13,7 +13,7 @@ from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
 from . import REPOSITORY_URL, __version__
 from .config import CONFIG_FILE, Config, load_config
-from .widgets import CalendarView, IpView, LifeView, WeatherView
+from .widgets import CalendarView, IpView, LifeView, TimeView, WeatherView
 
 STYLES_DIR = Path(__file__).parent / "styles"
 # ouikit's stylesheets first, so the app's own rules win where they differ
@@ -21,6 +21,7 @@ STYLE_FILES = (*ouikit.STYLE_FILES, STYLES_DIR / "outils.tcss")
 # Each mode by the name given on the command line, as its tab; the first one is the default
 MODES = {
     "calendar": ("Calendar", CalendarView),
+    "time": ("Time", TimeView),
     "weather": ("Weather", WeatherView),
     "ip": ("IP", IpView),
     "life": ("Life", LifeView),
@@ -33,7 +34,7 @@ def load_stylesheet() -> str:
 
 
 class OutilsApp(BaseApp):
-    """Everyday tools, one tab each: a calendar, the weather forecast, this computer's public IP and the Game of Life."""
+    """Everyday tools, one tab each: a calendar, clocks, the weather forecast, this computer's public IP and the Game of Life."""
 
     TITLE = "outils"
     VERSION = __version__
@@ -61,7 +62,7 @@ class OutilsApp(BaseApp):
 
     def compose(self) -> ComposeResult:
         yield AppHeader()
-        # The panes' ids differ from their views' own (#calendar, #weather, #ip, #life)
+        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #life)
         with TabbedContent(initial=f"{self.mode}-mode", id="modes"):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):

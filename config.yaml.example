@@ -9,7 +9,7 @@ theme: terminal
 # First day of the week in the calendar: monday (the default) to sunday.
 week_start: monday
 
-# The clocks under the calendar, top to bottom: the name shown, then its IANA time zone
+# The clocks on the Time tab, top to bottom: the name shown, then its IANA time zone
 # (https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 clocks:
   Portland: America/Los_Angeles
