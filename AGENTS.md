@@ -4,7 +4,7 @@ TUI with everyday tools, one tab each: `outils calendar` (the default), `outils 
 `outils ip` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
 The calendar shows this month and the next; the weather shows now and the next days, from Open-Meteo; the
-IP mode shows the public address, from ipinfo.io.
+IP mode shows what ipinfo.io knows about an address, the public one by default.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
@@ -56,8 +56,9 @@ outils/                 # git root + pyproject.toml (run uv commands here)
                         # location, units)
     months.py           # The month grids, shift_month and the day labels; no Textual
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
-    ipinfo.py           # ipinfo.io: the public address and the fields shown; no Textual
-    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py); month_view.py draws one month
+    ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
+    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py); month_view.py draws one month;
+                        # lookup_box.py is the box the weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
 ```
 
@@ -75,6 +76,11 @@ would break.
 
 Every tab sits over the same footer: `OutilsApp.compose` adds `#app-footer`, docked at the
 bottom, a rule like the header's (`border-top`) over a Close button on the left that quits.
+A view with a `CREDIT`, its words and its site's URL, has it shown in grey at the right, over
+the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlined on hover like
+every link: "Weather data by open-meteo.com"
+(its CC BY 4.0 license asks for it) and "Data from ipinfo.io". Under the calendar that line is
+hidden.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network.
 `MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
@@ -116,11 +122,11 @@ calls block, so `ForecastView.load` runs `weather.forecast` in a worker. Failure
 `WeatherView` is a City box over a `ForecastView`. It opens on `location` from `config.yaml`
 (`Portland, OR` by default), and Enter in the box looks up what was typed; the forecast on show
 stays until the new one comes. Once found, the place replaces the text in the box, in full and
-in blue (`ForecastView.Found`, the `-found` class), which is the only place the forecast says
+in blue (`ForecastView.Found`, then `LookupBox.show_found`), which is the only place the forecast says
 where it is for; clicking the box turns it back to plain text to type over. The app sets `AUTO_FOCUS = None` so the box never takes focus by
 itself (it would swallow `?`, `t` and `q`); it has focus only once clicked, and lets go after
-Enter or Escape (a `WeatherView` binding, so Escape there does not quit). A typed city is not
-saved.
+Enter or Escape (a `LookupBox` binding, so Escape there does not quit). The IP tab uses the
+same box. A typed city is not saved.
 
 A place is "City", or "City" with qualifiers after commas ("City, Region, Country"). `find_place` asks Open-Meteo's
 geocoding for the city and `pick_place` chooses among the answers: the exact name first (it lists
@@ -141,10 +147,19 @@ component classes (high orange, low cyan, rain chance blue).
 
 ## IP
 
-`ipinfo.fetch` asks `https://ipinfo.io/json` (no account, no key) with urllib; `IpView` runs it in
-a worker the first time it shows and shows one row per field in `ipinfo.FIELDS` order, the address first
-and in bold blue, skipping any field ipinfo.io leaves out (and its `readme` link). Failures raise
-`IpInfoError`, shown in the view and in the header. ipinfo.io limits unauthenticated requests
+`IpView` is an IP box (a `LookupBox`, as on the weather tab) over an `IpDetails`. The first time
+it shows, it asks about this computer's public address; Enter in the box asks about what was
+typed, and an empty box goes back to this computer's. Once found, the box turns blue and shows
+the address, except a host name, which stays as typed (the IP row gives its address), and `IpDetails` shows one row per field in `ipinfo.FIELDS` order, the
+address first and in bold blue, skipping
+any field ipinfo.io leaves out (and its `readme` link).
+
+`ipinfo.fetch(target)` asks `https://ipinfo.io/json` for this computer's address, or
+`https://ipinfo.io/<address>/json` for another (no account, no key), with urllib. ipinfo.io
+takes addresses only, so `resolve` turns a host name into one first, with a final dot so the
+system's search domain is not tried (a wildcard there answers for any name). A private or
+reserved address is refused before any request: ipinfo.io only answers `bogon` for it. Failures
+raise `IpInfoError`, shown in red in place of the details and, unlike the other tabs, not in the header. ipinfo.io limits unauthenticated requests
 per day, far above what opening a pop-up uses.
 
 ## Themes

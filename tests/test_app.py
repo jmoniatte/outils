@@ -69,6 +69,34 @@ class AppTest(unittest.TestCase):
 
         self.run_app(body)
 
+    def test_weather_and_ip_credit_their_service_over_the_rule_with_a_link(self):
+        async def body(app, pilot):
+            credit = app.query_one("#mode-credit")
+            link = app.query_one("#mode-credit-link")
+            self.assertFalse(credit.display)
+            for text, url in (("Weather data by open-meteo.com", "https://open-meteo.com"), ("Data from ipinfo.io", "https://ipinfo.io")):
+                await pilot.press("tab")
+                await pilot.pause()
+                self.assertTrue(credit.display)
+                line = "".join(segment.text for segment in app.screen._compositor.render_strips()[credit.region.y])
+                self.assertEqual(line.rstrip(), " " * (app.size.width - 1 - len(text)) + text)
+                self.assertEqual(credit.region.bottom, app.query_one("#app-footer-bar").region.y)
+                self.assertEqual(link.url, url)
+            # Blue, underlined only under the mouse
+            self.assertEqual(link.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
+            self.assertFalse(link.styles.text_style.underline)
+            await pilot.hover("#mode-credit-link")
+            await pilot.pause()
+            self.assertTrue(link.styles.text_style.underline)
+            # A click opens the site and leaves focus where it was
+            with patch.object(app, "open_url") as open_url:
+                await pilot.click("#mode-credit-link")
+                await pilot.pause()
+            open_url.assert_called_once_with("https://ipinfo.io")
+            self.assertIsNone(app.focused)
+
+        self.run_app(body)
+
     def test_a_click_on_a_tab_shows_its_mode(self):
         async def body(app, pilot):
             tabs = app.query_one("#modes", TabbedContent)
@@ -90,7 +118,7 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(footer.region.bottom, app.size.height)
                 self.assertEqual(close.region.y, app.size.height - 1)
                 self.assertEqual(close.region.x, 1)
-                self.assertEqual(footer.styles.border_top[0], "solid")
+                self.assertEqual(app.query_one("#app-footer-bar").styles.border_top[0], "solid")
                 # Clicking it quits, and it never takes focus from the mode
                 await pilot.click("#btn-close")
                 await pilot.pause()

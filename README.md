@@ -14,7 +14,8 @@ The weather icons need a [Nerd Font](https://www.nerdfonts.com).
 
 The IP mode shows the public (WAN) address this computer reaches the internet from, with what
 [ipinfo.io](https://ipinfo.io) knows about it: host name, city, region, country, postal code,
-location, time zone and network. It needs no account.
+location, time zone and network. It needs no account. Click the IP box, type another address or
+a host name and press Enter to look it up; an empty box goes back to this computer's address.
 
 ## Install
 

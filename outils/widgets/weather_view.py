@@ -2,9 +2,8 @@ import asyncio
 from datetime import date
 
 from rich.text import Text
-from textual import events, on, work
+from textual import on, work
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widget import Widget
@@ -12,6 +11,7 @@ from textual.widgets import Input, Static
 
 from ..config import Config
 from ..weather import UNIT_LABELS, Forecast, Place, WeatherError, describe, forecast
+from .lookup_box import LookupBox
 
 # The day's label, its icon and words, then its high and low, its chance of rain and how much
 # "Wednesday" and two spaces
@@ -28,10 +28,9 @@ class WeatherView(Vertical):
     Escape.
     """
 
-    BINDINGS = [
-        # Only reached while the box has focus; otherwise Escape quits, as everywhere
-        Binding("escape", "leave_city", show=False),
-    ]
+    # Shown at the bottom right, over the footer's rule: the words, then the link. Open-Meteo's
+    # data is CC BY 4.0, which asks for it
+    CREDIT = ("Weather data by", "https://open-meteo.com")
 
     def __init__(self, config: Config, today: date | None = None) -> None:
         super().__init__(id="weather")
@@ -40,9 +39,9 @@ class WeatherView(Vertical):
         self.asked = False
 
     def compose(self) -> ComposeResult:
-        with Horizontal(id="weather-city-row"):
-            yield Static("City", id="weather-city-label")
-            yield Input(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
+        with Horizontal(classes="lookup-row"):
+            yield Static("City", classes="lookup-label")
+            yield LookupBox(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
         yield ForecastView(self.config.units, self.today)
 
     def on_show(self) -> None:
@@ -51,20 +50,8 @@ class WeatherView(Vertical):
             self.asked = True
             self.query_one(ForecastView).load(self.config.location)
 
-    @on(events.DescendantFocus)
-    def _city_focused(self, event: events.DescendantFocus) -> None:
-        # Typing: plain text again, the blue is for a place found
-        if event.widget.id == "weather-city":
-            event.widget.remove_class("-found")
-
     def on_forecast_view_found(self, event: "ForecastView.Found") -> None:
-        city = self.query_one("#weather-city", Input)
-        city.value = event.place.label
-        city.cursor_position = 0
-        city.add_class("-found")
-
-    def action_leave_city(self) -> None:
-        self.screen.set_focus(None)
+        self.query_one(LookupBox).show_found(event.place.label)
 
     @on(Input.Submitted, "#weather-city")
     def _city_submitted(self, event: Input.Submitted) -> None:

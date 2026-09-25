@@ -8,8 +8,8 @@ from textual import on
 from textual.actions import SkipAction
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
-from textual.widgets import Button, TabbedContent, TabPane, Tabs
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
 from . import REPOSITORY_URL, __version__
 from .config import CONFIG_FILE, Config, load_config
@@ -65,11 +65,18 @@ class OutilsApp(BaseApp):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):
                     yield view(self.config)
-        # Under every tab: a rule, then Close on the left
-        with Horizontal(id="app-footer"):
-            close = Button("Close", id="btn-close")
-            close.can_focus = False  # A click must not pull focus off the mode and its keys
-            yield close
+        # Under every tab: where the tab's data comes from, if it says, then a rule and Close on the left
+        with Vertical(id="app-footer"):
+            with Horizontal(id="mode-credit"):
+                yield Static("", classes="spacer")
+                yield Static("", id="mode-credit-text")
+                link = Link("", id="mode-credit-link")
+                link.can_focus = False  # A click must not pull focus off the mode and its keys
+                yield link
+            with Horizontal(id="app-footer-bar"):
+                close = Button("Close", id="btn-close")
+                close.can_focus = False  # A click must not pull focus off the mode and its keys
+                yield close
 
     @on(Button.Pressed, "#btn-close")
     def _close(self, event: Button.Pressed) -> None:
@@ -97,6 +104,14 @@ class OutilsApp(BaseApp):
         view = pane.children[0]
         # Help lists the keys of the mode on show, then the app's own
         self.HELP_BINDINGS = (view.BINDINGS,)
+        credit = getattr(view, "CREDIT", None)
+        self.query_one("#mode-credit").display = credit is not None
+        if credit:
+            text, url = credit
+            self.query_one("#mode-credit-text", Static).update(f"{text} ")
+            link = self.query_one("#mode-credit-link", Link)
+            link.text = url.removeprefix("https://")
+            link.url = url
         # The calendar takes focus for its arrow keys; the city box must never take it by itself
         if view.can_focus:
             view.focus()

@@ -5,6 +5,40 @@
 #app-footer {
     dock: bottom;
     height: auto;
+}
+
+/* Where the tab's data comes from, over the rule; only tabs with a CREDIT show it */
+#mode-credit {
+    height: 1;
+    padding: 0 1;
+}
+
+#mode-credit .spacer {
+    width: 1fr;
+}
+
+#mode-credit-text {
+    width: auto;
+    color: $comment;
+}
+
+/* Like every link, the repository's on Help included: blue, underlined on hover */
+#mode-credit-link {
+    width: auto;
+    color: $blue;
+    /* Textual's Link is underlined by default */
+    text-style: none;
+    background: transparent;
+}
+
+#mode-credit-link:hover {
+    color: $blue;
+    text-style: underline;
+    background: transparent;
+}
+
+#app-footer-bar {
+    height: auto;
     padding: 0 1;
     border-top: solid $gutter;
 }
@@ -144,27 +178,22 @@ MonthView > .month--today {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   WEATHER - the place, the weather now, then a row per day
+   LOOKUP BOX - what the weather and the IP tabs look up, over what was found
    ═══════════════════════════════════════════════════════════════════════ */
 
-#weather {
-    height: auto;
-    padding: 0 4 1 4;
-}
-
-#weather-city-row {
+.lookup-row {
     height: 2;
     margin-bottom: 1;
 }
 
-/* A label, green like the IP mode's */
-#weather-city-label {
+/* Green like the labels of the IP tab */
+.lookup-label {
     width: 6;
     color: $green;
 }
 
 /* Underlined like ouikit's theme filter, so it reads as a place to type */
-#weather-city {
+LookupBox {
     width: 40;
     height: 2;
     padding: 0;
@@ -174,13 +203,22 @@ MonthView > .month--today {
     border-bottom: solid $gutter !important;
 }
 
-#weather-city:focus {
+LookupBox:focus {
     border-bottom: solid $blue !important;
 }
 
-/* The place found, in full, until the box is clicked again */
-#weather-city.-found {
+/* What was found, in full, until the box is clicked again */
+LookupBox.-found {
     color: $blue;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WEATHER - the place, the weather now, then a row per day
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#weather {
+    height: auto;
+    padding: 0 4 1 4;
 }
 
 #forecast {
@@ -213,25 +251,33 @@ MonthView > .month--today {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   IP - the public address, then what ipinfo.io knows about it
+   IP - an address, this computer's by default, then what ipinfo.io knows about it
    ═══════════════════════════════════════════════════════════════════════ */
 
 #ip {
     height: auto;
     padding: 0 4 1 4;
+}
+
+#ip-details {
+    height: auto;
     color: $fg;
 }
 
 /* Green like the keys on the Help panel: grey was too faint to read */
-#ip > .ip--label {
+#ip-details > .ip--label {
     color: $green;
 }
 
-#ip > .ip--address {
+#ip-details > .ip--address {
     color: $blue;
     text-style: bold;
 }
 
-#ip > .ip--message {
+#ip-details > .ip--message {
     color: $comment;
+}
+
+#ip-details > .ip--error {
+    color: $red;
 }
