@@ -13,7 +13,7 @@ from outils.app import OutilsApp, load_stylesheet
 from outils.config import Config
 from outils.ipinfo import IpInfoError, fetch, resolve, rows
 from outils.widgets import IpView
-from outils.widgets.ip_view import IpDetails
+from outils.widgets.ip_view import LABEL, IpDetails
 from ouikit.theme import load_palette
 
 ANSWER = {
@@ -137,6 +137,8 @@ class IpViewTest(unittest.TestCase):
             self.assertEqual(address.style, details.get_component_rich_style("ip--address"))
             self.assertEqual(lines[-1], "Network      AS209 CenturyLink Communications, LLC")
             self.assertEqual(len(lines), 9)
+            # The box starts where the values do
+            self.assertEqual(box.region.x, details.region.x + LABEL)
 
         self.run_view(body, return_value=ANSWER)
 

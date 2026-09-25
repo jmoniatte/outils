@@ -11,7 +11,7 @@ from ..config import Config
 from ..ipinfo import FIELDS, IpInfoError, fetch, rows
 from .lookup_box import LookupBox
 
-# The longest label and two spaces
+# The longest label and two spaces; the IP label is as wide in the TCSS, to line up the box
 LABEL = max(len(label) for _, label in FIELDS) + 2
 
 
@@ -23,7 +23,7 @@ class IpView(Vertical):
     """
 
     # Shown at the bottom right, over the footer's rule: the words, then the link
-    CREDIT = ("Data from", "https://ipinfo.io")
+    CREDIT = ("IP data by", "https://ipinfo.io")
 
     def __init__(self, config: Config) -> None:
         super().__init__(id="ip")

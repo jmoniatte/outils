@@ -74,7 +74,7 @@ class AppTest(unittest.TestCase):
             credit = app.query_one("#mode-credit")
             link = app.query_one("#mode-credit-link")
             self.assertFalse(credit.display)
-            for text, url in (("Weather data by open-meteo.com", "https://open-meteo.com"), ("Data from ipinfo.io", "https://ipinfo.io")):
+            for text, url in (("Weather data by open-meteo.com", "https://open-meteo.com"), ("IP data by ipinfo.io", "https://ipinfo.io")):
                 await pilot.press("tab")
                 await pilot.pause()
                 self.assertTrue(credit.display)

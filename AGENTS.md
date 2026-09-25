@@ -86,7 +86,7 @@ bottom, a rule like the header's (`border-top`) over a Close button on the left 
 A view with a `CREDIT`, its words and its site's URL, has it shown in grey at the right, over
 the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlined on hover like
 every link: "Weather data by open-meteo.com"
-(its CC BY 4.0 license asks for it) and "Data from ipinfo.io". A view with a `footnote`
+(its CC BY 4.0 license asks for it) and "IP data by ipinfo.io". A view with a `footnote`
 instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
 September 24, 2026"). Time and Life have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
@@ -179,7 +179,8 @@ component classes (high orange, low cyan, rain chance blue).
 
 ## IP
 
-`IpView` is an IP box (a `LookupBox`, as on the weather tab) over an `IpDetails`. The first time
+`IpView` is an IP box (a `LookupBox`, as on the weather tab) over an `IpDetails`; its label is
+as wide as the details' labels, so the box lines up with the values, as on the time tab. The first time
 it shows, it asks about this computer's public address; Enter in the box asks about what was
 typed, and an empty box goes back to this computer's. Once found, the box turns blue and shows
 the address, except a host name, which stays as typed (the IP row gives its address), and `IpDetails` shows one row per field in `ipinfo.FIELDS` order, the

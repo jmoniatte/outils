@@ -339,6 +339,11 @@ LookupBox.-found {
     padding: 0 4 1 4;
 }
 
+/* As wide as the details' labels ("Postal code" and two spaces), so the box lines up with the values */
+#ip .lookup-label {
+    width: 13;
+}
+
 #ip-details {
     height: auto;
     color: $fg;
