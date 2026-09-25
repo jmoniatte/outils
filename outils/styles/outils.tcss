@@ -177,6 +177,26 @@ MonthView > .month--today {
     text-style: bold;
 }
 
+/* The time now in a few places, under the months */
+#clocks {
+    width: auto;
+    height: auto;
+    margin-top: 1;
+    color: $fg;
+}
+
+#clocks > .clocks--time {
+    text-style: bold;
+}
+
+#clocks > .clocks--offset {
+    color: $comment;
+}
+
+#clocks > .clocks--dst {
+    color: $yellow;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    LOOKUP BOX - what the weather and the IP tabs look up, over what was found
    ═══════════════════════════════════════════════════════════════════════ */

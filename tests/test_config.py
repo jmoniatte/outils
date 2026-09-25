@@ -55,5 +55,20 @@ class WeatherConfigTest(unittest.TestCase):
         self.assertIn("kelvin", wrong.warnings[1])
 
 
+class ClocksConfigTest(unittest.TestCase):
+    def test_clocks_map_names_to_time_zones_in_order_and_bad_zones_warn(self) -> None:
+        self.assertEqual([clock.name for clock in Config().clocks], ["Portland", "Chicago", "UTC", "Strasbourg"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("clocks:\n  Tokyo: Asia/Tokyo\n  Home: Mars/Olympus\n  Paris: ' Europe/Paris '\n")
+            set_up = load_config(path)
+            path.write_text("clocks: [Europe/Paris]\n")
+            wrong = load_config(path)
+        self.assertEqual([(clock.name, clock.zone.key) for clock in set_up.clocks], [("Tokyo", "Asia/Tokyo"), ("Paris", "Europe/Paris")])
+        self.assertEqual(set_up.warnings, ["clocks: 'Mars/Olympus' is not a time zone, such as Europe/Paris"])
+        self.assertEqual(wrong.clocks, Config().clocks)
+        self.assertEqual(len(wrong.warnings), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

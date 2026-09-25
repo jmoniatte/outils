@@ -3,7 +3,7 @@
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils weather`,
 `outils ip` or `outils life` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
-The calendar shows this month and the next; the weather shows now and the next days, from Open-Meteo; the
+The calendar shows this month and the next, with the time in a few places under them; the weather shows now and the next days, from Open-Meteo; the
 IP mode shows what ipinfo.io knows about an address, the public one by default. Life, for fun,
 runs Conway's Game of Life.
 
@@ -54,12 +54,13 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     app.py              # OutilsApp, an ouikit BaseApp: MODES, the header, the keys
     __main__.py         # The command line: which tab to open on
     config.py           # Optional ~/.config/outils/config.yaml (theme, through ouikit.config; week_start,
-                        # location, units)
+                        # clocks, location, units)
+    clocks.py           # The time, offset and summer time in an IANA time zone; no Textual
     months.py           # The month grids, shift_month and the day labels; no Textual
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
     life.py             # The Game of Life's rules on a grid that wraps around; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
-    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py, life_view.py); month_view.py draws one month;
+    widgets/            # One view per mode (calendar_view.py, weather_view.py, ip_view.py, life_view.py); month_view.py draws one month, clocks_view.py the clocks under them;
                         # lookup_box.py is the box the weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
 ```
@@ -111,6 +112,13 @@ wherever it is in the row (`month--title-current`), and a month wholly past has 
 number always means past. The colors come
 from TCSS through `MonthView`'s component classes, so a theme change repaints them with no
 `apply_theme` override.
+
+Under the months, `ClocksView` shows a row per clock: its name, the time there, its offset from
+UTC and, while summer time is in force, Nerd Font's sun (the weather tab's) in yellow. The clocks are
+`clocks` in `config.yaml`, names mapped to IANA time zones in the order shown; the default is
+Portland, Chicago, UTC and Strasbourg. A zone Python's `zoneinfo` does not know is a warning in
+the header and is left out. The view checks the time every second and redraws when the minute
+turns; it makes no request.
 
 `week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is
 kept as calendar's number (Monday 0). An unknown day is a warning in the header and Monday.

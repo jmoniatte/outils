@@ -5,6 +5,8 @@ computer's public IP and, for fun, the Game of Life. The calendar
 shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once the current month is off screen, comes back to the current month.
+Under the months, a few clocks give the time elsewhere, with the offset from UTC and a yellow sun
+while summer time is in force.
 
 The weather shows the conditions now and a row per day for a week, from
 [Open-Meteo](https://open-meteo.com) (free, no account). It opens on your `location` (Portland, OR
@@ -54,6 +56,10 @@ theme: one-light
 week_start: sunday       # the calendar's first column; monday by default
 location: Victoria, BC   # where the weather opens; Portland, OR by default
 units: imperial          # metric by default
+clocks:                  # under the calendar, top to bottom: a name, then its time zone
+  Home: America/Vancouver
+  UTC: UTC
+  Tokyo: Asia/Tokyo
 ```
 
 A place is "City", or "City, Region or Country" when the name is shared; US states and Canadian

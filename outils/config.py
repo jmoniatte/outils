@@ -6,6 +6,7 @@ import yaml
 from ouikit.config import read_theme
 from ouikit.theme import TERMINAL_THEME
 
+from .clocks import DEFAULT_CLOCKS, Clock, find_zone
 from .months import WEEKDAY_NAMES
 from .weather import METRIC, UNITS
 
@@ -26,6 +27,8 @@ class Config:
     location: str = "Portland, OR"
     # metric or imperial
     units: str = METRIC
+    # The clocks under the calendar, top to bottom
+    clocks: list[Clock] = field(default_factory=lambda: _clocks(DEFAULT_CLOCKS))
     # Why the config file was ignored; the UI shows these
     warnings: list[str] = field(default_factory=list)
 
@@ -50,7 +53,28 @@ def load_config(path: Path = CONFIG_FILE) -> Config:
         config.warnings.append(warning)
     _read_week_start(data.get("week_start"), config)
     _read_weather(data, config)
+    _read_clocks(data.get("clocks"), config)
     return config
+
+
+def _clocks(zones: Mapping[str, str]) -> list[Clock]:
+    return [Clock(name, find_zone(zone)) for name, zone in zones.items()]
+
+
+def _read_clocks(value: object, config: Config) -> None:
+    if value is None:
+        return
+    if not isinstance(value, Mapping):
+        config.warnings.append("clocks: must map names to time zones, such as Paris: Europe/Paris")
+        return
+    clocks = []
+    for name, zone in value.items():
+        found = find_zone(str(zone).strip())
+        if found is None:
+            config.warnings.append(f"clocks: '{zone}' is not a time zone, such as Europe/Paris")
+        else:
+            clocks.append(Clock(str(name), found))
+    config.clocks = clocks
 
 
 def _read_weather(data: Mapping, config: Config) -> None:
