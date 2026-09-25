@@ -94,6 +94,7 @@ class CalendarViewTest(unittest.TestCase):
             self.assertEqual(months[1].region.x - months[0].region.right, 2)
             self.assertEqual(months[0].region.y, months[1].region.y)
             self.assertLessEqual(months[1].region.right - months[0].region.x, 58)
+            self.assertEqual(app.view.footnote, "Thursday, September 24, 2026")
 
         self.run_view(CalendarView(Config(), today=TODAY), body)
 

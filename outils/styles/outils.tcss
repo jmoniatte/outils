@@ -22,6 +22,11 @@
     color: $comment;
 }
 
+/* The calendar's date: something to read, not a source */
+#mode-credit-text.-footnote {
+    color: $blue;
+}
+
 /* Like every link, the repository's on Help included: blue, underlined on hover */
 #mode-credit-link {
     width: auto;

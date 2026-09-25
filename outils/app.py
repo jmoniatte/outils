@@ -106,14 +106,21 @@ class OutilsApp(BaseApp):
         view = pane.children[0]
         # Help lists the keys of the mode on show, then the app's own
         self.HELP_BINDINGS = (view.BINDINGS,)
+        # Where the mode's data comes from, with a link, or a line of its own with none
         credit = getattr(view, "CREDIT", None)
-        self.query_one("#mode-credit").display = credit is not None
+        footnote = getattr(view, "footnote", None)
+        self.query_one("#mode-credit").display = bool(credit or footnote)
+        link = self.query_one("#mode-credit-link", Link)
+        link.display = credit is not None
+        label = self.query_one("#mode-credit-text", Static)
+        label.set_class(not credit and bool(footnote), "-footnote")
         if credit:
             text, url = credit
-            self.query_one("#mode-credit-text", Static).update(f"{text} ")
-            link = self.query_one("#mode-credit-link", Link)
+            label.update(f"{text} ")
             link.text = url.removeprefix("https://")
             link.url = url
+        elif footnote:
+            label.update(footnote)
         # The calendar and Life take focus for their keys; the city box must never take it by itself
         if view.can_focus:
             view.focus()

@@ -98,6 +98,28 @@ class AppTest(unittest.TestCase):
         # The tab before the weather, which has no credit either
         self.run_app(body, "time")
 
+    def test_the_calendar_shows_today_in_full_where_the_credits_go_then_the_next_tab_does_not(self):
+        async def body(app, pilot):
+            credit = app.query_one("#mode-credit")
+            today = app.query_one(CalendarView).today
+            text = f"{today:%A, %B} {today.day}, {today.year}"
+            self.assertTrue(credit.display)
+            self.assertFalse(app.query_one("#mode-credit-link").display)
+            label = app.query_one("#mode-credit-text")
+            self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
+            line = "".join(segment.text for segment in app.screen._compositor.render_strips()[credit.region.y])
+            self.assertEqual(line.rstrip(), " " * (app.size.width - 1 - len(text)) + text)
+            await pilot.press("tab")
+            await pilot.pause()
+            self.assertFalse(credit.display)
+            await pilot.press("tab")
+            await pilot.pause()
+            self.assertTrue(app.query_one("#mode-credit-link").display)
+            # A credit's words stay grey
+            self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["comment"].lower())
+
+        self.run_app(body)
+
     def test_a_click_on_a_tab_shows_its_mode(self):
         async def body(app, pilot):
             tabs = app.query_one("#modes", TabbedContent)

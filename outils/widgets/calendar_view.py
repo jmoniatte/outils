@@ -55,6 +55,11 @@ class CalendarView(Vertical, can_focus=True):
     def on_mount(self) -> None:
         self._update_today_button()
 
+    @property
+    def footnote(self) -> str:
+        """Today in full, shown at the bottom right where the other tabs credit their source."""
+        return f"{self.today:%A, %B} {self.today.day}, {self.today.year}"
+
     def months(self) -> list[tuple[int, int]]:
         """The (year, month) shown, left to right."""
         return [shift_month(self.year, self.month, delta) for delta in range(-self.before, self.after + 1)]

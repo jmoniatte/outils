@@ -5,6 +5,7 @@ computer's public IP and, for fun, the Game of Life. The calendar
 shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once the current month is off screen, comes back to the current month.
+Today's date, in full, is at the bottom right.
 
 The Time tab gives the time now in a few places, with the offset from UTC and a yellow sun while
 summer time is in force (see `clocks` below). Above the clocks, the Epoch box converts an epoch

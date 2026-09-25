@@ -86,8 +86,9 @@ bottom, a rule like the header's (`border-top`) over a Close button on the left 
 A view with a `CREDIT`, its words and its site's URL, has it shown in grey at the right, over
 the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlined on hover like
 every link: "Weather data by open-meteo.com"
-(its CC BY 4.0 license asks for it) and "Data from ipinfo.io". Under the calendar that line is
-hidden.
+(its CC BY 4.0 license asks for it) and "Data from ipinfo.io". A view with a `footnote`
+instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
+September 24, 2026"). Time and Life have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network.
 `MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
