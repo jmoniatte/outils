@@ -1,7 +1,7 @@
 # outils
 
 Everyday tools in the terminal, one tab each: a calendar, clocks, the weather forecast, this
-computer's public IP and, for fun, the Game of Life. The calendar
+computer's public IP and, for fun, the Game of Life and snake. The calendar
 shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once the current month is off screen, comes back to the current month.
@@ -29,6 +29,10 @@ The Life tab runs [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway%2
 on a random grid that fills the tab, its edges wrapping around. A grid that settles into still or
 blinking shapes is replaced by a new one after a few seconds; `r` starts a new one at once.
 
+The Snake tab is the game of snake. It starts paused (`?` lists its keys): the arrows, `hjkl` or
+`wasd` steer, `p` or `space` plays and pauses, and `r` restarts. Leaving the tab pauses the game.
+Each point makes the snake a little quicker; the best score is kept between games.
+
 ## Install
 
 ```bash
@@ -46,6 +50,7 @@ outils time       # opens on the clocks
 outils weather    # opens on the weather forecast
 outils ip         # opens on this computer's public (WAN) IP address, from ipinfo.io
 outils life       # opens on the Game of Life
+outils snake      # opens on the game of snake
 ```
 
 Each command opens on its own tab, so a status-bar block can open the one it is about. Click a

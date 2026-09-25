@@ -33,11 +33,11 @@ class AppTest(unittest.TestCase):
         asyncio.run(main())
 
     def test_opens_on_the_mode_named_and_tab_moves_to_the_next(self):
-        for mode in ("calendar", "time", "weather", "ip", "life"):
+        for mode in ("calendar", "time", "weather", "ip", "life", "snake"):
             async def body(app, pilot, mode=mode):
                 tabs = app.query_one("#modes", TabbedContent)
                 self.assertEqual(app.query_one("#app-title").render().plain, "outils")
-                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "life")], ["Calendar", "Time", "Weather", "IP", "Life"])
+                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Life", "Snake"])
                 self.assertEqual(app.mode, mode)
 
             with self.subTest(mode=mode):
@@ -48,13 +48,13 @@ class AppTest(unittest.TestCase):
             self.assertEqual((self.forecast.call_count, self.fetch.call_count), (0, 0))
             self.assertIsInstance(app.focused, CalendarView)
             shown = []
-            for _ in range(6):
+            for _ in range(7):
                 await pilot.press("tab")
                 await pilot.pause()
                 shown.append((app.mode, app.focused))
-            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "life", "calendar", "time"])
-            # The calendar and Life keep focus for their keys; nothing else takes it, so ?, t and q work
-            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "LifeView", "CalendarView", "NoneType"])
+            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "life", "snake", "calendar", "time"])
+            # The calendar, Life and Snake keep focus for their keys; nothing else takes it, so ?, t and q work
+            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "LifeView", "SnakeView", "CalendarView", "NoneType"])
             await app.workers.wait_for_complete()
             self.assertEqual((self.forecast.call_count, self.fetch.call_count), (1, 1))
             # Help lists the keys of the mode on show, and tab does not switch under it
@@ -134,7 +134,7 @@ class AppTest(unittest.TestCase):
         self.run_app(body, "ip")
 
     def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
-        for mode in ("calendar", "time", "weather", "ip", "life"):
+        for mode in ("calendar", "time", "weather", "ip", "life", "snake"):
             async def body(app, pilot):
                 footer = app.query_one("#app-footer")
                 close = app.query_one("#btn-close")

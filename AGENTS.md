@@ -1,11 +1,11 @@
 # outils
 
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
-`outils weather`, `outils ip` or `outils life` says which tab it opens on.
+`outils weather`, `outils ip`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
 The calendar shows this month and the next; the time, the time now in a few places and an epoch converter; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default. Life, for fun,
-runs Conway's Game of Life.
+runs Conway's Game of Life, and Snake is the game of snake.
 
 It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
@@ -30,6 +30,7 @@ outils time
 outils weather
 outils ip
 outils life
+outils snake
 ```
 
 It refuses to start unless stdin and stdout are a terminal (ouikit's `start`).
@@ -62,8 +63,10 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     months.py           # The month grids, shift_month and the day labels; no Textual
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
     life.py             # The Game of Life's rules on a grid that wraps around; no Textual
+    snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
-    widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py, life_view.py);
+    widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py, life_view.py,
+                        # snake_view.py);
                         # month_view.py draws one month, clocks_view.py the time tab's clocks;
                         # lookup_box.py is the box the time, weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
@@ -75,7 +78,7 @@ Each mode is a tab of the `#modes` `TabbedContent`, under the header; the comman
 one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
 the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
 The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
-can take it (the calendar, for its arrows, and Life, for `r`) and clears it otherwise, so a hidden view never keeps
+can take it (the calendar, for its arrows, Life, for `r`, and Snake, for its keys) and clears it otherwise, so a hidden view never keeps
 it. A view must not focus itself: `TabbedContent` switches to the tab of whatever has focus.
 Weather and IP ask their service the first time their tab shows (`on_show`), so opening the
 calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
@@ -88,7 +91,7 @@ the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlin
 every link: "Weather data by open-meteo.com"
 (its CC BY 4.0 license asks for it) and "IP data by ipinfo.io". A view with a `footnote`
 instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
-September 24, 2026"). Time and Life have neither, so the line is hidden there.
+September 24, 2026"). Time, Life and Snake have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network.
 `MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
@@ -208,6 +211,38 @@ grid. The edges wrap around, so gliders come back on the other side. A grid that
 its last two generations (still or blinking) for `SETTLED_STEPS` is replaced by a new one, as is
 the grid after a resize; `r` starts a new one at once. The live cells are green, through the
 `life--cell` component class.
+
+## Snake
+
+`SnakeView` is a `SnakeBoard` with a column right of it (`#snake-side`, its first line level with
+the first row inside the wall, its last with the last): on top, the state in its color (Ready
+blue, Paused yellow, Game over red, You win! green; nothing while a game runs) and "Press Space"
+whenever the game is not running; at the bottom, "New best!" when the game just set it, the best
+score, then the score. The lines that
+come and go are hidden with `visible`, so the others keep their places. Nothing is written on
+the board once a game has started, so a screenshot shows it whole. Before a game, the board holds
+only the title, "S N A K E".
+
+The board is as tall as the tab allows and at most `SHAPE` (4:3) as wide, as snake boards
+usually are: `SnakeView.on_resize` sets its width. A cell is two characters wide and one tall
+(`CELL`), so it comes out square and a game is short. The wall is a full block thick at the
+sides and a half block on top (`▄`) and under (`▀`), the half on the board's side, not a CSS
+border: a border's line runs through the middle of its characters, so a snake touching it seemed
+not to. Where the snake crashed (`Game.crash`, in the wall or in itself) is red. `snake.Game` has
+the rules, with no Textual: the snake starts across the middle heading right, a turn waits for
+the next step (two at most, a turn back onto itself ignored), eating grows it and scores a
+point, and a wall or its own body ends the game (the cell the tail leaves is free). Filling the
+board wins.
+
+The view has four states: `ready` (before any game; the keys are on Help), `playing`, `paused`
+and `over`. It starts `ready`, and pauses when its tab hides (`on_hide`). Arrows, hjkl or wasd
+steer (and start or resume the game), p or space plays or pauses (and, once
+over, goes back to `ready` on a new board, so a second press starts it), r starts a new game at
+once. Each steer key is one `Binding` of three keys with a `key_display`, so Help
+shows one line per direction. A step is a `set_timer`, not an interval, so each point makes the
+next step quicker (`START_DELAY` down to `FASTEST_DELAY`). A new size (`SnakeBoard.Resized`) is
+a new board, back to `ready`. The best score is kept in `~/.cache/outils/snake.json`
+(`XDG_CACHE_HOME` respected); tests point `snake.BEST_FILE` elsewhere.
 
 ## Themes
 
