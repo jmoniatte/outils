@@ -25,7 +25,7 @@ class PasswordScreen(ModalScreen[bool]):
         self.network = network
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="password-dialog"):
+        with Vertical():
             yield Static(f"Connect to {self.network.ssid}", id="dialog-title", markup=False)
             yield Static(f"{self.network.security}, {self.network.band}", id="password-network")
             with Horizontal(classes="form-row"):

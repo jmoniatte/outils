@@ -1,12 +1,13 @@
 from datetime import date
 
-from tui_kit.shortcuts import ACTIONS
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Static
+from tui_kit.shortcuts import ACTIONS
 
+from ..click_only import quick_button
 from ..config import Config
 from ..months import shift_month
 from .month_view import MonthView
@@ -36,21 +37,14 @@ class CalendarView(Vertical, can_focus=True):
         # As wide as the months, so the buttons sit over their outer edges and their middle
         with Vertical(id="calendar-body"):
             with Horizontal(id="calendar-nav"):
-                yield self._button("← Previous", "btn-previous")
+                yield quick_button("← Previous", "btn-previous")
                 yield Static("", classes="spacer")
-                yield self._button("Today", "btn-today")
+                yield quick_button("Today", "btn-today")
                 yield Static("", classes="spacer")
-                yield self._button("Next →", "btn-next")
+                yield quick_button("Next →", "btn-next")
             with Horizontal(id="calendar-months"):
                 for year, month in self.months():
                     yield MonthView(year, month, self.first_weekday, self.today)
-
-    def _button(self, label: str, id: str) -> Button:
-        button = Button(label, id=id)
-        button.can_focus = False  # A click must not pull focus off the calendar and its keys
-        # Textual ignores clicks during the press flash; every click must move a month
-        button.active_effect_duration = 0
-        return button
 
     def on_mount(self) -> None:
         self._update_today_button()

@@ -2,17 +2,22 @@
 and the files that changed last in its folder. No account and no network: the command talks to
 the local daemon.
 
-The calls block; the app runs them with asyncio.to_thread.
+The calls block, and the view runs them with asyncio.to_thread, except start and stop: those are
+awaited, so quitting while one waits for the daemon does not wait for it too.
 """
 
+import asyncio
 import heapq
 import json
 import os
 import subprocess
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from tui_kit import processes
 
 COMMAND = "dropbox"
 # Where the client says its folder is; ~/Dropbox when it does not say
@@ -23,9 +28,10 @@ RECENT = 200
 TIMEOUT = 10
 # dropbox start waits up to a minute for the daemon
 START_TIMEOUT = 90
-# How long the daemon may take to quit, and how often to check
+# How long the daemon may take to quit
 STOP_TIMEOUT = 30
-STOP_CHECK = 0.5
+# How often start and stop check whether they are done
+CHECK = 0.5
 # What the client keeps in its folder for itself: .dropbox and .dropbox.cache
 PRIVATE = ".dropbox"
 
@@ -55,18 +61,12 @@ def folder(info_file: Path = INFO_FILE) -> Path:
         return DEFAULT_FOLDER
 
 
-def _run(*args: str, timeout: float = TIMEOUT) -> str:
+def _run(*args: str) -> str:
+    # Through tui-kit, so quitting kills a call still waiting; a missing command raises FileNotFoundError
     try:
-        result = subprocess.run(
-            [COMMAND, *args],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        return processes.run([COMMAND, *args], TIMEOUT).stdout.strip()
     except subprocess.TimeoutExpired:
         raise DropboxError(f"dropbox {' '.join(args)} did not answer") from None
-    return result.stdout.strip()
 
 
 def status() -> str | None:
@@ -86,31 +86,46 @@ def state(text: str | None) -> str:
     return RUNNING
 
 
-def start() -> None:
-    """Start the daemon, once it answers."""
-    # No pipes: the daemon would inherit them and the call would wait on them; its own session, so it outlives the app
-    try:
-        subprocess.run(
-            [COMMAND, "start"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=START_TIMEOUT,
-            start_new_session=True,
-        )
-    except subprocess.TimeoutExpired:
-        raise DropboxError("Dropbox did not start") from None
-
-
-def stop() -> None:
-    """Stop the daemon, once it no longer answers."""
-    _run("stop")
-    # dropbox stop only asks the daemon to quit, which takes a few seconds; until then it answers
-    deadline = time.monotonic() + STOP_TIMEOUT
-    while state(status()) != STOPPED:
+async def _wait_until(done: Callable[[], Awaitable[bool]], timeout: float, failure: str) -> None:
+    """Check done every CHECK seconds; DropboxError with failure once timeout has passed."""
+    deadline = time.monotonic() + timeout
+    while not await done():
         if time.monotonic() > deadline:
-            raise DropboxError("Dropbox did not stop")
-        time.sleep(STOP_CHECK)
+            raise DropboxError(failure)
+        await asyncio.sleep(CHECK)
+
+
+async def start() -> None:
+    """Start the daemon, once it answers."""
+    # No pipes, so not through tui-kit: the daemon would inherit them and the call would wait on them;
+    # its own session, so it outlives the app
+    process = subprocess.Popen(
+        [COMMAND, "start"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    async def exited() -> bool:
+        return process.poll() is not None
+
+    try:
+        await _wait_until(exited, START_TIMEOUT, "Dropbox did not start")
+    except DropboxError:
+        process.kill()
+        raise
+
+
+async def stop() -> None:
+    """Stop the daemon, once it no longer answers."""
+    await asyncio.to_thread(_run, "stop")
+
+    # dropbox stop only asks the daemon to quit, which takes a few seconds; until then it answers
+    async def stopped() -> bool:
+        return state(await asyncio.to_thread(status)) == STOPPED
+
+    await _wait_until(stopped, STOP_TIMEOUT, "Dropbox did not stop")
 
 
 def recent(root: Path, count: int = RECENT) -> list[RecentFile]:

@@ -1,4 +1,5 @@
 from textual.binding import Binding
+from textual.widget import Widget
 from tui_kit.help_screen import HelpScreen
 from tui_kit.shortcuts import SECTIONS, Shortcut
 
@@ -19,12 +20,12 @@ class OutilsHelpScreen(HelpScreen):
     still gets a panel of a fair size.
     """
 
-    def __init__(self, tab: str) -> None:
+    def __init__(self, tab: str, view: Widget) -> None:
         super().__init__()
         self.tab = tab
+        self.view = view
 
     def _sections(self) -> list[tuple[str, tuple[Shortcut, ...]]]:
-        return [
-            ("General", documented(self.app.BINDINGS)),
-            (self.tab, documented(*self.app.HELP_BINDINGS)),
-        ]
+        # A view whose keys are not all its own (Sound's cards, Wi-Fi's list) names them in HELP_BINDINGS
+        bindings = getattr(self.view, "HELP_BINDINGS", (self.view.BINDINGS,))
+        return [("General", documented(self.app.BINDINGS)), (self.tab, documented(*bindings))]

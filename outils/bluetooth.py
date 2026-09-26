@@ -5,11 +5,9 @@ asked for by address.
 """
 
 import re
-import subprocess
 from dataclasses import dataclass, replace
 
-from tui_kit import processes
-
+from . import command
 from .pactl import SINK, Device, Mixer
 
 TIMEOUT = 5
@@ -34,12 +32,7 @@ class Headset:
 
 
 def run(*args: str, timeout: float = TIMEOUT) -> str:
-    try:
-        result = processes.run(["bluetoothctl", *args], timeout)
-    except FileNotFoundError as error:
-        raise BluetoothError("bluetoothctl is not installed") from error
-    except subprocess.TimeoutExpired as error:
-        raise BluetoothError(f"bluetoothctl {args[0]} timed out") from error
+    result = command.run(["bluetoothctl", *args], BluetoothError, timeout)
     # bluetoothctl reports failures on stdout and often still exits 0
     if result.returncode != 0 or "Failed" in result.stdout:
         lines = [line.strip() for line in (result.stdout + result.stderr).splitlines() if line.strip()]

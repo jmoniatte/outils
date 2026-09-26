@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   FOOTER - the same under every tab: a rule like the header's, then Close
+   FOOTER - the same under every tab: a rule, then Close and Help
    ═══════════════════════════════════════════════════════════════════════ */
 
 #app-footer {
@@ -7,7 +7,7 @@
     height: auto;
 }
 
-/* Where the tab's data comes from, over the rule; only tabs with a CREDIT show it */
+/* Over the rule: where the tab's data comes from (a CREDIT), or its footnote */
 #mode-credit {
     height: 1;
     padding: 0 1;
@@ -80,6 +80,15 @@ FooterMessage {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   TABS - every tab's view, laid out the same way
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* On each tab's view (OutilsApp.compose); no room on top, since the tabs keep a blank row under them */
+.mode {
+    padding: 0 4 1 4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    HELP - the keys every tab shares on the left, the tab's own on the right
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -98,10 +107,8 @@ OutilsHelpScreen #shortcuts-general {
    CALENDAR - this month and the next, side by side like cal
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* No room on top: the tabs keep a blank row under them. Left, like the other tabs */
 #calendar {
     height: auto;
-    padding: 0 4 1 4;
 }
 
 #calendar-body {
@@ -218,7 +225,6 @@ MonthView > .month--today {
 
 #time {
     height: auto;
-    padding: 0 4 1 4;
 }
 
 #clocks {
@@ -238,12 +244,6 @@ MonthView > .month--today {
 
 #clocks > .clocks--dst {
     color: $yellow;
-}
-
-
-/* As wide as the results' labels, so the box lines up with the values under it */
-#epoch-row .lookup-label {
-    width: 10;
 }
 
 /* Room for a timestamp in milliseconds or a date like 2026-09-24 15:30; longer text scrolls */
@@ -267,28 +267,14 @@ MonthView > .month--today {
     background: $green 50%;
 }
 
-#epoch-details {
-    height: auto;
-    color: $fg;
-}
-
 /* Between the clocks and the epoch, a rule like the footer's */
 #time-rule {
     margin: 1 0;
     color: $gutter;
 }
 
-/* Green like the IP tab's labels */
-#epoch-details > .epoch--label {
-    color: $green;
-}
-
-#epoch-details > .epoch--error {
-    color: $red;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
-   LOOKUP BOX - what the weather and the IP tabs look up, over what was found
+   LOOKUP BOX - what the time, weather and IP tabs look up, over what was found
    ═══════════════════════════════════════════════════════════════════════ */
 
 .lookup-row {
@@ -296,9 +282,8 @@ MonthView > .month--today {
     margin-bottom: 1;
 }
 
-/* Green like the labels of the IP tab */
+/* Green like the keys on the Help panel: grey was too faint to read */
 .lookup-label {
-    width: 6;
     color: $green;
 }
 
@@ -322,13 +307,29 @@ LookupBox.-found {
     color: $blue;
 }
 
+LookupDetails {
+    height: auto;
+    color: $fg;
+}
+
+LookupDetails > .lookup--label {
+    color: $green;
+}
+
+LookupDetails > .lookup--message {
+    color: $comment;
+}
+
+LookupDetails > .lookup--error {
+    color: $red;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    WEATHER - the place, the weather now, then a row per day
    ═══════════════════════════════════════════════════════════════════════ */
 
 #weather {
     height: auto;
-    padding: 0 4 1 4;
 }
 
 /* °C and °F on the city's row: the one in use in blue, the other grey until hovered */
@@ -383,45 +384,17 @@ LookupBox.-found {
     color: $blue;
 }
 
-#forecast > .weather--message {
-    color: $comment;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    IP - an address, this computer's by default, then what ipinfo.io knows about it
    ═══════════════════════════════════════════════════════════════════════ */
 
 #ip {
     height: auto;
-    padding: 0 4 1 4;
-}
-
-/* As wide as the details' labels ("Postal code" and two spaces), so the box lines up with the values */
-#ip .lookup-label {
-    width: 13;
-}
-
-#ip-details {
-    height: auto;
-    color: $fg;
-}
-
-/* Green like the keys on the Help panel: grey was too faint to read */
-#ip-details > .ip--label {
-    color: $green;
 }
 
 #ip-details > .ip--address {
     color: $blue;
     text-style: bold;
-}
-
-#ip-details > .ip--message {
-    color: $comment;
-}
-
-#ip-details > .ip--error {
-    color: $red;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -430,7 +403,6 @@ LookupBox.-found {
 
 #dropbox {
     height: 1fr;
-    padding: 0 4 1 4;
 }
 
 /* Over the list, lined up with its right edge */
@@ -532,7 +504,6 @@ LookupBox.-found {
 
 #sound {
     height: 1fr;
-    padding: 0 4 1 4;
 }
 
 #sound-sections {
@@ -550,7 +521,7 @@ LookupBox.-found {
     height: auto;
 }
 
-/* The microphones sit under a line, the same as the header's, rather than a title, a blank row under it */
+/* The microphones sit under a line, the same as the footer's, rather than a title, a blank row under it */
 #inputs-cards {
     border-top: solid $gutter;
     padding-top: 1;
@@ -640,9 +611,9 @@ DeviceCard.-muted .card-bar > .volume-bar--lit {
     color: $comment;
 }
 
+/* Blank, as wide as the figure and the bar it stands in for */
 DeviceCard .card-state {
     width: 22;
-    color: $comment;
 }
 
 DeviceCard Button {
@@ -691,7 +662,6 @@ DeviceCard .btn-mute.-unmute:hover {
 
 #wifi {
     height: 1fr;
-    padding: 0 4 1 4;
 }
 
 #networks-tabs {
@@ -800,10 +770,8 @@ PanelScreen #title-separator {
     height: 1;
 }
 
-/* A tall window still gets its Close button */
-#details-panel {
+#network-panel {
     min-width: 60;
-    max-height: 100%;
 }
 
 PanelScreen .details-row {
@@ -818,11 +786,6 @@ PanelScreen .details-label {
 
 PanelScreen .details-value {
     width: auto;
-}
-
-#share-panel {
-    min-width: 60;
-    max-height: 100%;
 }
 
 /* Blue, like an action: the code opens on its own screen. Under the password, lined up with it */
@@ -892,7 +855,6 @@ PasswordScreen #password-error {
 
 #life {
     height: 1fr;
-    margin: 0 4 1 4;
 }
 
 #life > .life--cell {
@@ -905,7 +867,6 @@ PasswordScreen #password-error {
 
 #snake {
     height: 1fr;
-    padding: 0 4 1 4;
 }
 
 #snake-board {

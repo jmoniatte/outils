@@ -5,48 +5,23 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-from textual.app import App, ComposeResult
+from textual.app import App
 from textual.widgets import Input
 
-from outils.app import OutilsApp, load_stylesheet
+from outils.app import OutilsApp
 from outils.config import Config
 from outils.weather import IMPERIAL, METRIC, WeatherError, parse_forecast
 from outils.widgets import WeatherView
 from outils.widgets.weather_view import ForecastView
-from tui_kit.theme import load_palette
 
-from test_weather import FORECAST, PLACE
+from tests.host import Host, settle
+from tests.test_weather import FORECAST, PLACE
 
 VICTORIA = parse_forecast(PLACE, METRIC, FORECAST)
 
 
-class Host(App):
-    CSS = load_stylesheet()
-    AUTO_FOCUS = None
-
-    def __init__(self, view: WeatherView) -> None:
-        super().__init__()
-        self.view = view
-        self.messages: list[str] = []
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield self.view
-
-    def notify(self, message, **kwargs) -> None:
-        self.messages.append(message)
-
-
 def shown(app: App) -> list[str]:
     return [line.rstrip() for line in app.query_one(ForecastView).render().plain.split("\n")]
-
-
-async def settle(app, pilot):
-    await pilot.pause()
-    await app.workers.wait_for_complete()
-    await pilot.pause()
 
 
 class WeatherViewTest(unittest.TestCase):
@@ -130,7 +105,7 @@ class WeatherViewTest(unittest.TestCase):
 
         self.run_view(Config(location="Victoria, BC"), body, side_effect=lambda location, units: parse_forecast(PLACE, units, FORECAST))
 
-    def test_an_error_shows_in_the_view_and_the_header(self):
+    def test_an_error_shows_in_the_view_and_the_footer(self):
         async def body(app, pilot, fetch):
             self.assertEqual(shown(app), ["Cannot reach Open-Meteo: no network"])
             self.assertEqual(app.messages, ["Cannot reach Open-Meteo: no network"])

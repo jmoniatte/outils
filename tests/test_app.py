@@ -8,7 +8,7 @@ from tui_kit.help_screen import HelpScreen
 from tui_kit.theme_picker import ThemePicker
 from textual.widgets import TabbedContent
 
-from outils.app import FooterMessage, OutilsApp
+from outils.app import MODES, FooterMessage, OutilsApp
 from outils.config import Config
 from outils.ipinfo import IpInfoError
 from outils.nmcli import Scan
@@ -28,6 +28,11 @@ def help_keys(app) -> dict[str, list[str]]:
         ]
         for column in app.screen.query(".shortcuts-section")
     }
+
+
+def screen_row(app, y: int) -> str:
+    """The text on row y of the screen."""
+    return "".join(segment.text for segment in app.screen._compositor.render_strips()[y])
 
 
 class AppTest(unittest.TestCase):
@@ -58,13 +63,13 @@ class AppTest(unittest.TestCase):
         asyncio.run(main())
 
     def test_opens_on_the_mode_named_and_tab_moves_to_the_next(self):
-        for mode in ("calendar", "time", "weather", "ip", "sound", "wifi", "dropbox", "life", "snake"):
+        for mode in MODES:
             async def body(app, pilot, mode=mode):
                 tabs = app.query_one("#modes", TabbedContent)
                 # No title bar: the tabs are the first row
                 self.assertFalse(app.query("#app-header"))
                 self.assertEqual(tabs.region.y, 0)
-                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "sound", "wifi", "dropbox", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Sound", "Wi-Fi", "Dropbox", "Life", "Snake"])
+                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in MODES], ["Calendar", "Time", "Weather", "IP", "Sound", "Wi-Fi", "Dropbox", "Life", "Snake"])
                 self.assertEqual(app.mode, mode)
 
             with self.subTest(mode=mode):
@@ -112,7 +117,7 @@ class AppTest(unittest.TestCase):
                 await pilot.press("tab")
                 await pilot.pause()
                 self.assertTrue(credit.display)
-                line = "".join(segment.text for segment in app.screen._compositor.render_strips()[credit.region.y])
+                line = screen_row(app, credit.region.y)
                 self.assertEqual(line.rstrip(), " " * (app.size.width - 1 - len(text)) + text)
                 self.assertEqual(credit.region.bottom, app.query_one("#app-footer-bar").region.y)
                 self.assertEqual(link.url, url)
@@ -141,7 +146,7 @@ class AppTest(unittest.TestCase):
             self.assertFalse(app.query_one("#mode-credit-link").display)
             label = app.query_one("#mode-credit-text")
             self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
-            line = "".join(segment.text for segment in app.screen._compositor.render_strips()[credit.region.y])
+            line = screen_row(app, credit.region.y)
             self.assertEqual(line.rstrip(), " " * (app.size.width - 1 - len(text)) + text)
             await pilot.press("tab")
             await pilot.pause()
@@ -168,7 +173,7 @@ class AppTest(unittest.TestCase):
         self.run_app(body, "ip")
 
     def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
-        for mode in ("calendar", "time", "weather", "ip", "sound", "wifi", "dropbox", "life", "snake"):
+        for mode in MODES:
             async def body(app, pilot):
                 footer = app.query_one("#app-footer")
                 close = app.query_one("#btn-close")
@@ -197,6 +202,14 @@ class AppTest(unittest.TestCase):
             await pilot.press("escape", "t")
             await pilot.pause()
             self.assertIsInstance(app.screen, ThemePicker)
+
+        self.run_app(body)
+
+    def test_a_message_that_fits_stays_on_one_line(self):
+        async def body(app, pilot):
+            app.notify("Playing on a device with a much longer name than any real one would have here")
+            await pilot.pause()
+            self.assertEqual(app.query_one(FooterMessage).size.height, 1)
 
         self.run_app(body)
 

@@ -2,20 +2,16 @@ import asyncio
 import os
 import subprocess
 import tempfile
-import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from textual.app import App, ComposeResult
-
-from outils.app import load_stylesheet
 from outils.config import Config
 from outils.dropbox import MISSING, RUNNING, STOPPED, DropboxError, RecentFile, folder, recent, start, state, status, stop
 from outils.widgets import DropboxView
 from outils.widgets.dropbox_view import RecentFiles
-from tui_kit.theme import load_palette
+from tests.host import Host, settle
 
 
 class DropboxTest(unittest.TestCase):
@@ -27,44 +23,43 @@ class DropboxTest(unittest.TestCase):
 
     def test_status_is_the_command_output_or_none_when_it_is_missing(self):
         done = subprocess.CompletedProcess([], 0, stdout="Up to date\n", stderr="DeprecationWarning")
-        with patch("outils.dropbox.subprocess.run", return_value=done) as run:
+        with patch("outils.dropbox.processes.run", return_value=done) as run:
             self.assertEqual(status(), "Up to date")
         self.assertEqual(run.call_args.args[0], ["dropbox", "status"])
-        with patch("outils.dropbox.subprocess.run", side_effect=FileNotFoundError):
+        with patch("outils.dropbox.processes.run", side_effect=FileNotFoundError):
             self.assertIsNone(status())
-        with patch("outils.dropbox.subprocess.run", side_effect=subprocess.TimeoutExpired("dropbox", 10)):
+        with patch("outils.dropbox.processes.run", side_effect=subprocess.TimeoutExpired("dropbox", 10)):
             with self.assertRaisesRegex(DropboxError, "did not answer"):
                 status()
 
     def test_start_gives_the_daemon_no_pipe_to_hold(self):
-        with patch("outils.dropbox.subprocess.run") as run:
-            start()
-        self.assertEqual(run.call_args.args[0], ["dropbox", "start"])
-        self.assertEqual(run.call_args.kwargs["stdout"], subprocess.DEVNULL)
-        self.assertEqual(run.call_args.kwargs["stderr"], subprocess.DEVNULL)
-        self.assertTrue(run.call_args.kwargs["start_new_session"])
-        with patch("outils.dropbox.subprocess.run", side_effect=subprocess.TimeoutExpired("dropbox", 90)):
-            with self.assertRaisesRegex(DropboxError, "did not start"):
-                start()
+        with patch("outils.dropbox.subprocess.Popen") as popen, patch("outils.dropbox.CHECK", 0):
+            popen.return_value.poll.side_effect = [None, 0]
+            asyncio.run(start())
+            self.assertEqual(popen.call_args.args[0], ["dropbox", "start"])
+            self.assertEqual(popen.call_args.kwargs["stdout"], subprocess.DEVNULL)
+            self.assertEqual(popen.call_args.kwargs["stderr"], subprocess.DEVNULL)
+            self.assertTrue(popen.call_args.kwargs["start_new_session"])
+            popen.return_value.poll.side_effect = None
+            popen.return_value.poll.return_value = None
+            with patch("outils.dropbox.START_TIMEOUT", 0), self.assertRaisesRegex(DropboxError, "did not start"):
+                asyncio.run(start())
+            popen.return_value.kill.assert_called_once()
 
     def test_stop_waits_until_the_daemon_is_gone(self):
         answers = iter(["Up to date", "Up to date", "Dropbox isn't running!"])
         with (
             patch("outils.dropbox._run") as run,
-            patch("outils.dropbox.status", side_effect=lambda: next(answers)),
-            patch("outils.dropbox.time.sleep") as sleep,
+            patch("outils.dropbox.status", side_effect=lambda: next(answers)) as status,
+            patch("outils.dropbox.CHECK", 0),
         ):
-            stop()
-        run.assert_called_once_with("stop")
-        self.assertEqual(sleep.call_count, 2)
-        with (
-            patch("outils.dropbox._run"),
-            patch("outils.dropbox.status", return_value="Up to date"),
-            patch("outils.dropbox.time.sleep"),
-            patch("outils.dropbox.time.monotonic", side_effect=[0, 10, 31]),
-            self.assertRaisesRegex(DropboxError, "did not stop"),
-        ):
-            stop()
+            asyncio.run(stop())
+            run.assert_called_once_with("stop")
+            self.assertEqual(status.call_count, 3)
+            status.side_effect = None
+            status.return_value = "Up to date"
+            with patch("outils.dropbox.STOP_TIMEOUT", 0), self.assertRaisesRegex(DropboxError, "did not stop"):
+                asyncio.run(stop())
 
     def test_folder_comes_from_the_client_info_or_defaults_to_home(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -91,28 +86,6 @@ class DropboxTest(unittest.TestCase):
             self.assertEqual(recent(root / "missing"), [])
 
 
-class Host(App):
-    CSS = load_stylesheet()
-    AUTO_FOCUS = None
-
-    def __init__(self, view: DropboxView) -> None:
-        super().__init__()
-        self.view = view
-        self.messages: list[str] = []
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield self.view
-
-    def on_mount(self) -> None:
-        self.view.focus()
-
-    def notify(self, message, **kwargs) -> None:
-        self.messages.append(message)
-
-
 def files(now: datetime) -> list[RecentFile]:
     names = ("notes/today.md", "Camera Uploads/photo.jpg", "old.txt")
     ages = (timedelta(minutes=3), timedelta(hours=5), timedelta(days=2))
@@ -136,15 +109,10 @@ class DropboxViewTest(unittest.TestCase):
             ):
                 app = Host(DropboxView(Config(), root=Path("/box")))
                 async with app.run_test(size=(80, 20)) as pilot:
-                    await self.settle(app, pilot)
+                    await settle(app, pilot)
                     await body(app, pilot)
 
         asyncio.run(main())
-
-    async def settle(self, app, pilot):
-        await pilot.pause()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
 
     def test_shows_stop_and_the_latest_files_and_opens_the_one_selected(self):
         async def body(app, pilot):
@@ -189,8 +157,8 @@ class DropboxViewTest(unittest.TestCase):
             label = app.query_one("#dropbox-state")
             toggle = app.query_one("#btn-dropbox-toggle")
             # While dropbox stop runs: "Stopping..." in red in place of the button
-            release = threading.Event()
-            self.stop.side_effect = lambda: release.wait(5)
+            release = asyncio.Event()
+            self.stop.side_effect = release.wait
             self.status.return_value = "Dropbox isn't running!"
             await pilot.click("#btn-dropbox-toggle")
             await pilot.pause()
@@ -199,24 +167,24 @@ class DropboxViewTest(unittest.TestCase):
             self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["red"].lower())
             self.assertFalse(toggle.display)
             release.set()
-            await self.settle(app, pilot)
+            await settle(app, pilot)
             self.stop.assert_called_once()
             self.assertFalse(label.display)
             self.assertTrue(toggle.display)
             self.assertEqual(str(toggle.label), "Start Dropbox")
             self.assertEqual(toggle.styles.color.hex.lower(), app.get_css_variables()["green"].lower())
             # And "Starting..." in green
-            self.start.side_effect = lambda: release.wait(5)
+            self.start.side_effect = release.wait
             release.clear()
             await pilot.click("#btn-dropbox-toggle")
             await pilot.pause()
             self.assertEqual(str(label.render()), "Starting...")
             self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["green"].lower())
             release.set()
-            await self.settle(app, pilot)
+            await settle(app, pilot)
             self.start.side_effect = DropboxError("Dropbox did not start")
             await pilot.click("#btn-dropbox-toggle")
-            await self.settle(app, pilot)
+            await settle(app, pilot)
             self.assertEqual(self.start.call_count, 2)
             self.assertEqual(app.messages, ["Dropbox did not start"])
             self.assertFalse(label.display)

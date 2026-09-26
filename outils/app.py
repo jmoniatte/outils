@@ -2,22 +2,33 @@ import asyncio
 from pathlib import Path
 
 import tui_kit
-from tui_kit.header_notification import HeaderNotification
-from tui_kit.base_app import COPY_BINDING, HELP_BINDING, THEME_BINDING, BaseApp
-from tui_kit.shortcuts import GENERAL
 from textual import on
 from textual.actions import SkipAction
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.notifications import Notification
 from textual.containers import Horizontal, Vertical
+from textual.notifications import Notification
 from textual.widget import Widget
 from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
+from tui_kit.base_app import COPY_BINDING, HELP_BINDING, THEME_BINDING, BaseApp
+from tui_kit.header_notification import HeaderNotification
+from tui_kit.shortcuts import GENERAL
 
 from . import REPOSITORY_URL, __version__, remote
+from .click_only import click_only
 from .config import CONFIG_FILE, Config, load_config, save_units
 from .screens import OutilsHelpScreen
-from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, SoundView, TimeView, WeatherView, WifiView
+from .widgets import (
+    CalendarView,
+    DropboxView,
+    IpView,
+    LifeView,
+    SnakeView,
+    SoundView,
+    TimeView,
+    WeatherView,
+    WifiView,
+)
 
 STYLES_DIR = Path(__file__).parent / "styles"
 # tui-kit's stylesheets first, so the app's own rules win where they differ
@@ -70,6 +81,7 @@ class OutilsApp(BaseApp):
     # Nothing takes focus on its own: the weather's city box would swallow ?, t and q; the
     # calendar gets it when its tab shows, for its arrow keys
     AUTO_FOCUS = None
+    CSS = load_stylesheet()
 
     BINDINGS = [
         HELP_BINDING,
@@ -90,30 +102,25 @@ class OutilsApp(BaseApp):
         self.config = config if config is not None else load_config()
         # The view of the tab on show, told when it hides
         self.shown_view: Widget | None = None
-        self.CSS = load_stylesheet()
         super().__init__(self.config.theme, CONFIG_FILE)
 
     def compose(self) -> ComposeResult:
         # No title bar: the tabs say where you are, and the messages sit by the buttons at the bottom
-        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #sound, #wifi, #dropbox, #life, #snake)
+        # The panes' ids differ from their views' own, which a duplicate id would break
         with TabbedContent(initial=f"{self.mode}-mode", id="modes"):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):
-                    yield view(self.config)
+                    yield view(self.config).add_class("mode")
         # Under every tab: where the tab's data comes from, if it says, then a rule, Close on the left and
         # Help on the right; a message takes Help's place while it shows
         with Vertical(id="app-footer"):
             with Horizontal(id="mode-credit"):
                 yield Static("", classes="spacer")
                 yield Static("", id="mode-credit-text")
-                link = Link("", id="mode-credit-link")
-                link.can_focus = False  # A click must not pull focus off the mode and its keys
-                yield link
+                yield click_only(Link("", id="mode-credit-link"))
             with Horizontal(id="app-footer-bar"):
-                for label, button_id in (("Close", "btn-close"), ("Help", "btn-help")):
-                    button = Button(label, id=button_id)
-                    button.can_focus = False  # A click must not pull focus off the mode and its keys
-                    yield button
+                yield click_only(Button("Close", id="btn-close"))
+                yield click_only(Button("Help", id="btn-help"))
                 yield FooterMessage()
 
     @on(Button.Pressed, "#btn-help")
@@ -122,8 +129,7 @@ class OutilsApp(BaseApp):
         self.action_help()
 
     def action_help(self) -> None:
-        # The keys every tab shares, then this tab's own under its name
-        self.push_screen(OutilsHelpScreen(MODES[self.mode][0]))
+        self.push_screen(OutilsHelpScreen(MODES[self.mode][0], self.shown_view))
 
     @on(Button.Pressed, "#btn-close")
     def _close(self, event: Button.Pressed) -> None:
@@ -168,9 +174,10 @@ class OutilsApp(BaseApp):
 
     def apply_theme(self, theme_name: str) -> None:
         super().apply_theme(theme_name)
-        # refresh_css only re-applies TCSS; the Wi-Fi lists bake their colors into Rich text
-        for view in self.query(WifiView):
-            view.set_colors()
+        # refresh_css only re-applies TCSS: a view that bakes its colors into Rich text (Wi-Fi) repaints itself
+        for view in self.query(".mode"):
+            if hasattr(view, "set_colors"):
+                view.set_colors()
 
     def on_weather_view_units_changed(self, event: WeatherView.UnitsChanged) -> None:
         save_units(event.units, CONFIG_FILE)
@@ -187,27 +194,11 @@ class OutilsApp(BaseApp):
     def _show_mode(self, pane: TabPane) -> None:
         self.mode = pane.id.removesuffix("-mode")
         view = pane.children[0]
-        # Help lists the keys of the mode on show (a view may give more than its own), then the app's
-        self.HELP_BINDINGS = getattr(view, "HELP_BINDINGS", (view.BINDINGS,))
-        # Where the mode's data comes from, with a link, or a line of its own with none
-        credit = getattr(view, "CREDIT", None)
-        footnote = getattr(view, "footnote", None)
-        self.query_one("#mode-credit").display = bool(credit or footnote)
-        link = self.query_one("#mode-credit-link", Link)
-        link.display = credit is not None
-        label = self.query_one("#mode-credit-text", Static)
-        label.set_class(not credit and bool(footnote), "-footnote")
-        if credit:
-            text, url = credit
-            label.update(f"{text} ")
-            link.text = url.removeprefix("https://")
-            link.url = url
-        elif footnote:
-            label.update(footnote)
+        self._show_credit(view)
         # Once per switch: on mount, TabbedContent then says again that the first tab is active
         if view is self.shown_view:
             return
-        # The calendar, Dropbox, Life and Snake take focus for their keys; the city box must never take it by itself
+        # A view with keys of its own takes focus; otherwise nothing has it, so no box swallows ?, t and q
         if view.can_focus:
             view.focus()
         else:
@@ -219,3 +210,16 @@ class OutilsApp(BaseApp):
         self.shown_view = view
         if hasattr(view, "tab_shown"):
             view.tab_shown()
+
+    def _show_credit(self, view: Widget) -> None:
+        """Over the rule: where the mode's data comes from, with a link, or its footnote, or nothing."""
+        text, url = getattr(view, "CREDIT", None) or (getattr(view, "footnote", None), None)
+        self.query_one("#mode-credit").display = bool(text)
+        label = self.query_one("#mode-credit-text", Static)
+        label.update(f"{text} " if url else text or "")
+        label.set_class(url is None, "-footnote")
+        link = self.query_one("#mode-credit-link", Link)
+        link.display = url is not None
+        if url:
+            link.text = url.removeprefix("https://")
+            link.url = url

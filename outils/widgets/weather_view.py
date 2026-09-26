@@ -7,14 +7,15 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input
 
+from ..click_only import quick_button
 from ..config import Config
-from ..weather import IMPERIAL, METRIC, UNIT_LABELS, Forecast, Place, WeatherError, describe, forecast
-from .lookup_box import LookupBox
+from ..weather import IMPERIAL, METRIC, UNIT_LABELS, Forecast, WeatherError, describe, forecast
+from .lookup_box import LookupBox, lookup_row
 
 # The day's label, its icon and words, then its high and low, its chance of rain and how much.
-# Roomy, now the pop-up is wider: "Wednesday" and three spaces
+# "Wednesday" and three spaces
 DAY_LABEL = 12
 # "Thunderstorm, hail" and four spaces
 DESCRIPTION = 22
@@ -46,19 +47,14 @@ class WeatherView(Vertical):
         super().__init__(id="weather")
         self.config = config
         self.today = today
-        self.asked = False
+        # What was last asked for, so a change of units asks for it again; empty until the tab shows
+        self.location = ""
 
     def compose(self) -> ComposeResult:
-        with Horizontal(classes="lookup-row"):
-            yield Static("City", classes="lookup-label")
-            yield LookupBox(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
-            with Horizontal(id="weather-units"):
-                for units, label in ((METRIC, "°C"), (IMPERIAL, "°F")):
-                    button = Button(label, id=f"units-{units}")
-                    button.can_focus = False  # A click must not pull focus, as on the calendar's buttons
-                    button.active_effect_duration = 0
-                    yield button
-        yield ForecastView(self.config.units, self.today)
+        buttons = [quick_button(label, f"units-{units}") for units, label in ((METRIC, "°C"), (IMPERIAL, "°F"))]
+        box = LookupBox(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
+        yield lookup_row("City", box, Horizontal(*buttons, id="weather-units"))
+        yield ForecastView(self.today)
 
     def on_mount(self) -> None:
         self._show_units()
@@ -75,29 +71,38 @@ class WeatherView(Vertical):
             return
         self.config.units = units
         self._show_units()
-        forecast_view = self.query_one(ForecastView)
-        forecast_view.units = units
         # Open-Meteo converts: the place on show, asked again in the other units
-        if self.asked:
-            forecast_view.load(forecast_view.location)
+        if self.location:
+            self.load(self.location)
         self.post_message(self.UnitsChanged(units))
 
     def on_show(self) -> None:
         # Asked the first time its tab shows, so opening another tab costs no request
-        if not self.asked:
-            self.asked = True
-            self.query_one(ForecastView).load(self.config.location)
-
-    def on_forecast_view_found(self, event: "ForecastView.Found") -> None:
-        self.query_one(LookupBox).show_found(event.place.label)
+        if not self.location:
+            self.load(self.config.location)
 
     @on(Input.Submitted, "#weather-city")
     def _city_submitted(self, event: Input.Submitted) -> None:
         event.stop()
         city = event.value.strip()
         if city:
-            self.query_one(ForecastView).load(city)
-        self.screen.set_focus(None)
+            self.load(city)
+
+    @work(exclusive=True)
+    async def load(self, location: str) -> None:
+        """Ask Open-Meteo for location, keeping what is on show until the answer comes."""
+        self.location = location
+        view = self.query_one(ForecastView)
+        if view.forecast is None:
+            view.show(None, f"Asking Open-Meteo for the weather in {location}...")
+        try:
+            found = await asyncio.to_thread(forecast, location, self.config.units)
+        except WeatherError as error:
+            view.show(None, str(error))
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self.query_one(LookupBox).show_found(found.place.label)
+        view.show(found)
 
 
 class ForecastView(Widget):
@@ -106,45 +111,24 @@ class ForecastView(Widget):
     The colors come from TCSS through the component classes, so a theme change repaints them.
     """
 
-    class Found(Message):
-        """A forecast came in; the city box shows its place."""
-
-        def __init__(self, place: Place) -> None:
-            super().__init__()
-            self.place = place
-
     COMPONENT_CLASSES = {
         "weather--temperature",
         "weather--dim",
         "weather--high",
         "weather--low",
         "weather--rain",
-        "weather--message",
     }
 
-    def __init__(self, units: str, today: date | None = None) -> None:
+    def __init__(self, today: date | None = None) -> None:
         super().__init__(id="forecast")
-        self.units = units
         self.today = today or date.today()
         self.forecast: Forecast | None = None
+        # Shown, dim, while there is no forecast: that it is coming, or why it did not
         self.message = ""
-        # What was last asked for, so a change of units asks for it again
-        self.location = ""
 
-    @work(exclusive=True)
-    async def load(self, location: str) -> None:
-        """Ask Open-Meteo for location, keeping what is on show until the answer comes."""
-        self.location = location
-        if self.forecast is None:
-            self.message = f"Asking Open-Meteo for the weather in {location}..."
-            self.refresh(layout=True)
-        try:
-            self.forecast = await asyncio.to_thread(forecast, location, self.units)
-            self.post_message(self.Found(self.forecast.place))
-        except WeatherError as error:
-            self.forecast = None
-            self.message = str(error)
-            self.app.notify(str(error), severity="error", timeout=10)
+    def show(self, found: Forecast | None, message: str = "") -> None:
+        self.forecast = found
+        self.message = message
         self.refresh(layout=True)
 
     def _style(self, name: str):
@@ -152,7 +136,7 @@ class ForecastView(Widget):
 
     def render(self) -> Text:
         if self.forecast is None:
-            return Text(self.message, style=self._style("message"))
+            return Text(self.message, style=self._style("dim"))
         labels = UNIT_LABELS[self.forecast.units]
         now = self.forecast.current
         words, icon = describe(now.code, now.is_day)

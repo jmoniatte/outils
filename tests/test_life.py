@@ -2,13 +2,10 @@ import asyncio
 import random
 import unittest
 
-from textual.app import App, ComposeResult
-
-from outils.app import load_stylesheet
 from outils.config import Config
 from outils.life import random_cells, step
 from outils.widgets import LifeView
-from tui_kit.theme import load_palette
+from tests.host import Host
 
 GLIDER = {(1, 0), (2, 1), (0, 2), (1, 2), (2, 2)}
 
@@ -34,19 +31,6 @@ class LifeTest(unittest.TestCase):
         self.assertTrue(all(0 <= x < 10 and 0 <= y < 4 for x, y in cells))
 
 
-class Host(App):
-    CSS = load_stylesheet()
-
-    def __init__(self, view: LifeView) -> None:
-        super().__init__()
-        self.view = view
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield self.view
-
 
 class LifeViewTest(unittest.TestCase):
     def run_view(self, body):
@@ -61,7 +45,7 @@ class LifeViewTest(unittest.TestCase):
     def test_fills_its_space_two_cells_per_character_and_restarts(self):
         async def body(app, pilot):
             view = app.view
-            # Its margins take 8 columns and a row; each row holds two cells
+            # Its tab's padding takes 8 columns and a row; each row holds two cells
             self.assertEqual((view.columns, view.rows), (32, 20))
             lines = view.render().plain.split("\n")
             self.assertEqual((len(lines), {len(line) for line in lines}), (10, {32}))
@@ -72,7 +56,6 @@ class LifeViewTest(unittest.TestCase):
             for _ in range(30):
                 view.advance()
             self.assertNotEqual(view.cells, {(0, 0), (1, 0), (0, 1), (1, 1)})
-            view.focus()
             before = view.cells
             await pilot.press("r")
             self.assertNotEqual(view.cells, before)

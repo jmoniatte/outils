@@ -1,15 +1,16 @@
 import asyncio
 from datetime import datetime
 
-from tui_kit.dialog import ConfirmDialog
-from tui_kit.shortcuts import ACTIONS
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, DataTable, Static, TabbedContent, TabPane, Tabs
+from tui_kit.dialog import ConfirmDialog
+from tui_kit.shortcuts import ACTIONS
 
 from .. import nmcli
+from ..click_only import click_only
 from ..config import Config
 from ..nmcli import Network, NmcliError, Scan
 from ..screens import DetailsScreen, PasswordScreen, ShareScreen
@@ -50,6 +51,8 @@ class WifiView(Vertical):
         self.wifi_on = True
         self.connectivity = "unknown"
         self.scanning = False
+        # The last nmcli failure while loading, so it is shown once, not on every refresh
+        self._load_error: str | None = None
         # The list takes focus only while the tab shows: TabbedContent would switch to a hidden one
         self.showing = False
         self.asked = False
@@ -68,20 +71,14 @@ class WifiView(Vertical):
                         cursor_foreground_priority="renderable",
                     )
         with Horizontal(id="networks-footer"):
-            yield self._button("Rescan", "btn-rescan")
+            yield click_only(Button("Rescan", id="btn-rescan"))
             # The status takes the time's place whenever there is something to say
             yield Static("", id="networks-scanned")
             yield Static("", id="networks-status")
             # The buttons that cut the connection stand apart on the right
             yield Static("", id="networks-footer-spacer")
-            yield self._button("Disconnect", "btn-disconnect")
-            yield self._button("Wi-Fi off", "btn-wifi")
-
-    @staticmethod
-    def _button(label: str, button_id: str) -> Button:
-        button = Button(label, id=button_id)
-        button.can_focus = False  # A click must not pull focus off the list
-        return button
+            yield click_only(Button("Disconnect", id="btn-disconnect"))
+            yield click_only(Button("Wi-Fi off", id="btn-wifi"))
 
     def on_mount(self) -> None:
         # The tables keep focus; the lists switch by click or with the arrows
@@ -130,29 +127,6 @@ class WifiView(Vertical):
             self.query_one(f"#{tab_id}-table", NetworksTable).show(networks)
             tabs.get_tab(tab_id).label = f"{label} ({len(networks)})"
 
-    def set_wifi(self, on: bool) -> None:
-        """Red to turn the radio off, green to turn it on; rescanning and disconnecting need it on."""
-        button = self.query_one("#btn-wifi", Button)
-        button.label = "Wi-Fi off" if on else "Wi-Fi on"
-        button.set_class(on, "-off")
-        button.set_class(not on, "-on")
-        self.query_one("#btn-rescan").display = on
-        self.query_one("#btn-disconnect").display = on
-        self.query_one("#networks-status").set_class(not on, "-first")
-
-    def set_status(self, text: str, warning: bool = False) -> None:
-        status = self.query_one("#networks-status", Static)
-        status.update(text)
-        status.display = bool(text)
-        status.set_class(warning, "-warning")
-        self.query_one("#networks-scanned").display = not text
-
-    def set_scanned(self, text: str) -> None:
-        self.query_one("#networks-scanned", Static).update(text)
-
-    def selected_network(self) -> Network | None:
-        return self.table.selected_network()
-
     @on(NetworksTable.SwitchList)
     def _switch_list(self, event: NetworksTable.SwitchList) -> None:
         event.stop()
@@ -167,9 +141,9 @@ class WifiView(Vertical):
             self.table.focus()
 
     @on(DataTable.RowSelected)
-    def _connect_selected(self, event: DataTable.RowSelected) -> None:
+    def _row_selected(self, event: DataTable.RowSelected) -> None:
         event.stop()
-        network = self.selected_network()
+        network = self.table.selected_network()
         if network is None:
             return
         # The Saved list is for sharing; connecting is done from Nearby
@@ -202,7 +176,7 @@ class WifiView(Vertical):
         self._show_details()
 
     def action_forget(self) -> None:
-        network = self.selected_network()
+        network = self.table.selected_network()
         if network is None or self._still_connecting():
             return
         if not network.saved:
@@ -229,43 +203,68 @@ class WifiView(Vertical):
         """Show what NetworkManager last saw; with rescan, then wait the few seconds a fresh scan takes and show that."""
         try:
             self.wifi_on = await asyncio.to_thread(nmcli.wifi_enabled)
-            if not self.wifi_on:
+            if self.wifi_on:
+                await self._scan(rescan)
+            else:
                 self.show(Scan([], []))
                 self._show_status()
-                return
-            self.connectivity = await asyncio.to_thread(nmcli.connectivity)
-            self._show_scan(await asyncio.to_thread(nmcli.scan))
-            if rescan:
-                self.scanning = True
-                self._show_status()
-                try:
-                    scan = await asyncio.to_thread(nmcli.scan, True)
-                finally:
-                    # Not redrawn here: cancelled as the app quits, the view may be gone
-                    self.scanning = False
-                self._show_scan(scan)
         except NmcliError as error:
-            self.set_status("Scan failed")
-            self.app.notify(str(error), severity="error")
+            self._set_status("Scan failed")
+            if str(error) != self._load_error:
+                self.app.notify(str(error), severity="error")
+            self._load_error = str(error)
+            return
+        self._load_error = None
+
+    async def _scan(self, rescan: bool) -> None:
+        self.connectivity = await asyncio.to_thread(nmcli.connectivity)
+        self._show_scan(await asyncio.to_thread(nmcli.scan))
+        if rescan:
+            self.scanning = True
+            self._show_status()
+            try:
+                scan = await asyncio.to_thread(nmcli.scan, True)
+            finally:
+                # Not redrawn here: cancelled as the app quits, the view may be gone
+                self.scanning = False
+            self._show_scan(scan)
 
     def _show_scan(self, scan: Scan) -> None:
         self.show(scan)
         self._show_status()
-        self.set_scanned(f"{datetime.now():%H:%M:%S}")
+        self.query_one("#networks-scanned", Static).update(f"{datetime.now():%H:%M:%S}")
 
     def _show_status(self) -> None:
         """The one thing worth saying in the footer, most urgent first; the list labels hold the counts."""
-        self.set_wifi(self.wifi_on)
+        self._show_buttons()
         if self.connecting is not None:
-            self.set_status(f"Connecting to {self.connecting}...")
+            self._set_status(f"Connecting to {self.connecting}...")
         elif not self.wifi_on:
-            self.set_status("Wi-Fi is off", warning=True)
+            self._set_status("Wi-Fi is off", warning=True)
         elif self.connectivity == "portal":
-            self.set_status("Login page required: press o", warning=True)
+            self._set_status("Login page required: press o", warning=True)
         elif self.connectivity == "limited":
-            self.set_status("No internet access", warning=True)
+            self._set_status("No internet access", warning=True)
         else:
-            self.set_status("Scanning..." if self.scanning else "")
+            self._set_status("Scanning..." if self.scanning else "")
+
+    def _show_buttons(self) -> None:
+        """Red to turn the radio off, green to turn it on; rescanning and disconnecting need it on."""
+        on = self.wifi_on
+        button = self.query_one("#btn-wifi", Button)
+        button.label = "Wi-Fi off" if on else "Wi-Fi on"
+        button.set_class(on, "-off")
+        button.set_class(not on, "-on")
+        self.query_one("#btn-rescan").display = on
+        self.query_one("#btn-disconnect").display = on
+        self.query_one("#networks-status").set_class(not on, "-first")
+
+    def _set_status(self, text: str, warning: bool = False) -> None:
+        status = self.query_one("#networks-status", Static)
+        status.update(text)
+        status.display = bool(text)
+        status.set_class(warning, "-warning")
+        self.query_one("#networks-scanned").display = not text
 
     def _connect_requested(self, network: Network) -> None:
         if self._still_connecting():

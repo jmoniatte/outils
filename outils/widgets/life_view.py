@@ -1,10 +1,9 @@
 import random
 
-from tui_kit.shortcuts import ACTIONS
 from rich.text import Text
 from textual.binding import Binding
-from textual.events import Resize
 from textual.widget import Widget
+from tui_kit.shortcuts import ACTIONS
 
 from ..config import Config
 from ..life import Cell, random_cells, step
@@ -49,8 +48,9 @@ class LifeView(Widget, can_focus=True):
     def on_hide(self) -> None:
         self.timer.pause()
 
-    def on_resize(self, event: Resize) -> None:
-        width, height = event.size.width, event.size.height * 2
+    def on_resize(self) -> None:
+        # The content area: the event's size would count the tab's padding
+        width, height = self.size.width, self.size.height * 2
         if (width, height) != (self.columns, self.rows):
             self.columns, self.rows = width, height
             self.action_restart()

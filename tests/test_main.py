@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from outils import remote
 from outils.__main__ import main
+from outils.app import MODES
 
 
 class MainTest(unittest.TestCase):
@@ -21,15 +22,9 @@ class MainTest(unittest.TestCase):
             patch("outils.__main__.OutilsApp") as app,
         ):
             main([])
-            main(["time"])
-            main(["weather"])
-            main(["ip"])
-            main(["dropbox"])
-            main(["sound"])
-            main(["wifi"])
-            main(["life"])
-            main(["snake"])
-        self.assertEqual([call.args for call in app.call_args_list], [("calendar",), ("time",), ("weather",), ("ip",), ("dropbox",), ("sound",), ("wifi",), ("life",), ("snake",)])
+            for mode in MODES:
+                main([mode])
+        self.assertEqual([call.args for call in app.call_args_list], [("calendar",), *((mode,) for mode in MODES)])
         self.assertEqual(start.call_args.args[0], "outils")
         # The one started listens for `outils --show`
         self.assertEqual(app.call_args.kwargs, {"socket_path": remote.SOCKET})

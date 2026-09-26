@@ -58,7 +58,7 @@ The Life tab runs [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway%2
 on a random grid that fills the tab, its edges wrapping around. A grid that settles into still or
 blinking shapes is replaced by a new one after a few seconds; `r` starts a new one at once.
 
-The Snake tab is the game of snake. It starts paused (`?` lists its keys): the arrows, `hjkl` or
+The Snake tab is the game of snake. It opens on its title screen (`?` lists its keys): the arrows, `hjkl` or
 `wasd` steer, `p` or `space` plays and pauses, and `r` restarts. Leaving the tab pauses the game.
 Each point makes the snake a little quicker; the best score is kept between games.
 

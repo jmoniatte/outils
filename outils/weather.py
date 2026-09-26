@@ -4,21 +4,20 @@ Every call blocks; the app runs them with asyncio.to_thread.
 """
 
 import json
-import os
 import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+
+from . import CACHE_DIR
+from .web import get_json
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-TIMEOUT = 10
 DAYS = 7
 # Where a location, once found, is kept, so opening the pop-up costs one request, not two
-CACHE_FILE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "outils" / "places.json"
+CACHE_FILE = CACHE_DIR / "places.json"
 
 METRIC = "metric"
 IMPERIAL = "imperial"
@@ -122,14 +121,9 @@ def describe(code: int, is_day: bool = True) -> tuple[str, str]:
     return text, _NIGHT if icon == _CLEAR and not is_day else icon
 
 
-def get_json(url: str, params: dict) -> dict:
-    try:
-        with urlopen(f"{url}?{urlencode(params)}", timeout=TIMEOUT) as response:
-            return json.load(response)
-    except HTTPError as error:
-        raise WeatherError(f"Open-Meteo answered {error.code}") from None
-    except (URLError, TimeoutError, OSError) as error:
-        raise WeatherError(f"Cannot reach Open-Meteo: {getattr(error, 'reason', error)}") from None
+def ask(url: str, params: dict) -> dict:
+    """Open-Meteo's answer at url for params; a failure is a WeatherError."""
+    return get_json(f"{url}?{urlencode(params)}", "Open-Meteo", WeatherError)
 
 
 def _plain(text: str) -> str:
@@ -196,7 +190,7 @@ def find_place(location: str, cache_file: Path = CACHE_FILE) -> Place:
     if location in cache:
         return Place(**cache[location])
     name = location.partition(",")[0].strip()
-    data = get_json(GEOCODING_URL, {"name": name, "count": 10, "language": "en", "format": "json"})
+    data = ask(GEOCODING_URL, {"name": name, "count": 10, "language": "en", "format": "json"})
     place = pick_place(location, data.get("results") or [])
     if place is None:
         raise WeatherError(f"Open-Meteo does not know {location!r}")
@@ -255,4 +249,4 @@ def forecast(location: str, units: str = METRIC) -> Forecast:
         "forecast_days": DAYS,
         **_UNIT_PARAMS[units],
     }
-    return parse_forecast(place, units, get_json(FORECAST_URL, params))
+    return parse_forecast(place, units, ask(FORECAST_URL, params))

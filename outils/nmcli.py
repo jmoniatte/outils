@@ -3,10 +3,9 @@
 Every call blocks until nmcli exits; the app runs them with asyncio.to_thread.
 """
 
-import subprocess
 from dataclasses import dataclass
 
-from tui_kit import processes
+from . import command
 
 # How long nmcli waits for a connection to come up before giving up
 CONNECT_TIMEOUT = 30
@@ -52,12 +51,7 @@ class Network:
 
 def run(*args: str, stdin: str | None = None, timeout: float = 30) -> str:
     """Run nmcli and return its output, raising NmcliError with its message when it fails."""
-    try:
-        result = processes.run(["nmcli", *args], timeout, input=stdin)
-    except FileNotFoundError as error:
-        raise NmcliError("nmcli is not installed") from error
-    except subprocess.TimeoutExpired as error:
-        raise NmcliError(f"nmcli {args[0]} timed out") from error
+    result = command.run(["nmcli", *args], NmcliError, timeout, input=stdin)
     if result.returncode != 0:
         raise NmcliError(_error_message(result.stderr or result.stdout))
     return result.stdout
@@ -87,24 +81,31 @@ def split_terse(line: str) -> list[str]:
     return fields
 
 
-def parse_scan(output: str, saved: dict[str, str] | None = None) -> list[Network]:
+def terse_rows(output: str, width: int) -> list[list[str]]:
+    """The lines of `nmcli -t` output split into their fields, leaving out any without width of them."""
+    return [fields for fields in map(split_terse, output.splitlines()) if len(fields) == width]
+
+
+def _rows(fields: str, *args: str) -> list[list[str]]:
+    """Run nmcli in terse mode for the comma-separated fields and return its rows."""
+    return terse_rows(run("-t", "-f", fields, *args), fields.count(",") + 1)
+
+
+def parse_scan(output: str, saved: dict[str, str]) -> list[Network]:
     """One Network per SSID, the one in use first, then by signal.
 
     A merged row takes its signal and band from the access point in use, else the strongest.
     Hidden networks (no SSID) are left out.
     """
-    saved = saved or {}
     best: dict[str, Network] = {}
-    for line in output.splitlines():
-        fields = split_terse(line)
-        if len(fields) != 5 or not fields[1]:
+    for in_use, ssid, frequency, signal, security in terse_rows(output, 5):
+        if not ssid:
             continue
-        in_use, ssid, frequency, signal, security = fields
         network = Network(
             ssid=ssid,
-            signal=_int(signal),
-            security="" if security in ("", "--") else security,
-            frequency=_int(frequency.split()[0] if frequency else ""),
+            signal=_number(signal),
+            security=_security(security),
+            frequency=_number(frequency),
             in_use=in_use.strip() == "*",
             saved_uuid=saved.get(ssid, ""),
         )
@@ -120,20 +121,20 @@ def _better(candidate: Network, current: Network) -> bool:
     return candidate.signal > current.signal
 
 
-def _int(text: str) -> int:
-    try:
-        return int(text)
-    except ValueError:
-        return 0
+def _number(text: str) -> int:
+    """The number a value starts with ("2437 MHz", "130 Mbit/s"), or 0 when there is none."""
+    words = text.split()
+    return int(words[0]) if words and words[0].isdigit() else 0
+
+
+def _security(text: str) -> str:
+    """nmcli writes "--" for an open network; "" here."""
+    return "" if text == "--" else text
 
 
 def saved_networks() -> dict[str, str]:
     """SSID -> UUID of every saved Wi-Fi profile; a profile's name need not be its SSID."""
-    uuids = [
-        fields[0]
-        for fields in map(split_terse, run("-t", "-f", "UUID,TYPE", "connection", "show").splitlines())
-        if len(fields) == 2 and fields[1] == WIFI_TYPE
-    ]
+    uuids = [uuid for uuid, kind in _rows("UUID,TYPE", "connection", "show") if kind == WIFI_TYPE]
     if not uuids:
         return {}
     output = run("-t", "-f", "connection.uuid,802-11-wireless.ssid", "connection", "show", *uuids)
@@ -165,14 +166,6 @@ def saved_list(nearby: list[Network], saved: dict[str, str]) -> list[Network]:
     return in_range + away
 
 
-@dataclass(frozen=True, slots=True)
-class Scan:
-    """What the two tabs show."""
-
-    nearby: list[Network]
-    saved: list[Network]
-
-
 def wifi_enabled() -> bool:
     return run("radio", "wifi").strip() == "enabled"
 
@@ -184,6 +177,14 @@ def set_wifi(on: bool) -> None:
 def connectivity() -> str:
     """NetworkManager's last check: full, limited (no internet), portal (a login page first), none or unknown."""
     return run("-t", "networking", "connectivity").strip()
+
+
+@dataclass(frozen=True, slots=True)
+class Scan:
+    """What the two tabs show."""
+
+    nearby: list[Network]
+    saved: list[Network]
 
 
 def scan(rescan: bool = False) -> Scan:
@@ -227,18 +228,16 @@ def _forget_new_profile(ssid: str) -> None:
 
 def disconnect() -> str:
     """Take down the active Wi-Fi connection; returns its name, or "" when there was none."""
-    for fields in map(split_terse, run("-t", "-f", "NAME,UUID,TYPE", "connection", "show", "--active").splitlines()):
-        if len(fields) == 3 and fields[2] == WIFI_TYPE:
-            run("connection", "down", "uuid", fields[1])
-            return fields[0]
+    for name, uuid, kind in _rows("NAME,UUID,TYPE", "connection", "show", "--active"):
+        if kind == WIFI_TYPE:
+            run("connection", "down", "uuid", uuid)
+            return name
     return ""
 
 
 def forget(network: Network) -> None:
     """Delete the saved profile, so the next connect asks for the password again."""
-    if network.saved:
-        run("connection", "delete", "uuid", network.saved_uuid)
-
+    run("connection", "delete", "uuid", network.saved_uuid)
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,9 +276,9 @@ def band_name(frequency: int) -> str:
 
 def wifi_device() -> str:
     """The Wi-Fi device that is connected, or "" when none is."""
-    for fields in map(split_terse, run("-t", "-f", "DEVICE,TYPE,STATE", "device").splitlines()):
-        if len(fields) == 3 and fields[1] == "wifi" and fields[2] == "connected":
-            return fields[0]
+    for device, kind, state in _rows("DEVICE,TYPE,STATE", "device"):
+        if kind == "wifi" and state == "connected":
+            return device
     return ""
 
 
@@ -307,32 +306,25 @@ def parse_details(device: str, shown: str, access_points: str) -> Details:
         if value:
             values.setdefault(key.split("[")[0], []).append(value)
     first = {key: found[0] for key, found in values.items()}
-    access_point = next(
-        (fields for fields in map(split_terse, access_points.splitlines()) if len(fields) == 8 and fields[0] == "*"),
-        None,
+    # Blank when the access point in use is not listed: Details' defaults
+    _, bssid, ssid, channel, frequency, rate, signal, security = next(
+        (fields for fields in terse_rows(access_points, 8) if fields[0] == "*"), [""] * 8
     )
-    ap = {}
-    if access_point is not None:
-        _, bssid, ssid, channel, frequency, rate, signal, security = access_point
-        ap = dict(
-            bssid=bssid,
-            ssid=ssid,
-            channel=_int(channel),
-            frequency=_int(frequency.split()[0] if frequency else ""),
-            rate=_int(rate.split()[0] if rate else ""),
-            signal=_int(signal),
-            security="" if security in ("", "--") else security,
-        )
     return Details(
         device=device,
-        ssid=ap.pop("ssid", "") or first.get("GENERAL.CONNECTION", ""),
+        ssid=ssid or first.get("GENERAL.CONNECTION", ""),
         uuid=first.get("GENERAL.CON-UUID", ""),
+        security=_security(security),
+        frequency=_number(frequency),
+        channel=_number(channel),
+        signal=_number(signal),
+        rate=_number(rate),
+        bssid=bssid,
         mac=first.get("GENERAL.HWADDR", ""),
         addresses=tuple(values.get("IP4.ADDRESS", ())),
         gateway=first.get("IP4.GATEWAY", ""),
         dns=tuple(values.get("IP4.DNS", ())),
         ipv6=tuple(values.get("IP6.ADDRESS", ())),
-        **ap,
     )
 
 

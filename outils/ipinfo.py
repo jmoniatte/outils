@@ -4,15 +4,13 @@ The calls block; the app runs them with asyncio.to_thread.
 """
 
 import ipaddress
-import json
 import socket
-from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+
+from .web import get_json
 
 URL = "https://ipinfo.io/json"
 # The same answer, for another address
 ADDRESS_URL = "https://ipinfo.io/{}/json"
-TIMEOUT = 10
 # What the view shows, in order: (ipinfo's key, the label). The rest, like readme, is left out
 FIELDS = (
     ("ip", "IP"),
@@ -52,15 +50,7 @@ def resolve(target: str) -> str:
 def fetch(target: str = "") -> dict[str, str]:
     """ipinfo.io's answer about target, an address or a host name; this computer's when empty."""
     url = ADDRESS_URL.format(resolve(target)) if target else URL
-    try:
-        with urlopen(url, timeout=TIMEOUT) as response:
-            data = json.load(response)
-    except HTTPError as error:
-        raise IpInfoError(f"ipinfo.io answered {error.code}") from None
-    except (URLError, TimeoutError, OSError) as error:
-        raise IpInfoError(f"Cannot reach ipinfo.io: {getattr(error, 'reason', error)}") from None
-    except ValueError:
-        raise IpInfoError("ipinfo.io did not answer with JSON") from None
+    data = get_json(url, "ipinfo.io", IpInfoError)
     if not isinstance(data, dict) or "ip" not in data:
         raise IpInfoError("ipinfo.io did not give an address")
     return data

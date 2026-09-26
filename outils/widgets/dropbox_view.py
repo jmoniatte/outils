@@ -2,7 +2,6 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tui_kit.shortcuts import ACTIONS
 from rich.style import Style
 from rich.text import Text
 from textual import on, work
@@ -14,16 +13,32 @@ from textual.geometry import Region
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Static
+from tui_kit.shortcuts import ACTIONS
 
+from ..click_only import click_only, quick_button
 from ..config import Config
-from ..dropbox import MISSING, RECENT, RUNNING, STOPPED, DropboxError, RecentFile, folder, open_file, recent, start, state, status, stop
+from ..dropbox import (
+    MISSING,
+    RECENT,
+    RUNNING,
+    STOPPED,
+    DropboxError,
+    RecentFile,
+    folder,
+    open_file,
+    recent,
+    start,
+    state,
+    status,
+    stop,
+)
 from ..epoch import relative
 
 # Seconds between two looks at the client and the folder, while the tab shows
 POLL = 2
 # "59 minutes ago" and two spaces
 AGE = 16
-# What the client's state reads as, left of the button
+# The button's tooltip: stop quits the client, it does not pause it
 STOP_TIP = "Quits the Dropbox app. Nothing syncs until you start it again."
 START_TIP = "Starts the Dropbox app, which syncs what changed while it was stopped."
 
@@ -55,15 +70,12 @@ class DropboxView(Vertical, can_focus=True):
             state_label = Static("", id="dropbox-state")
             state_label.display = False
             yield state_label
-            toggle = Button("Stop Dropbox", id="btn-dropbox-toggle")
-            toggle.can_focus = False  # A click must not pull focus off the list and its keys
-            toggle.active_effect_duration = 0
+            toggle = quick_button("Stop Dropbox", "btn-dropbox-toggle")
             # Until the client has answered; hidden, not removed, so it keeps its place
             toggle.visible = False
             yield toggle
         # Scrolls when the files do not all fit
-        with VerticalScroll(id="dropbox-scroll") as scroll:
-            scroll.can_focus = False  # The view keeps focus for its keys
+        with click_only(VerticalScroll(id="dropbox-scroll")):
             yield RecentFiles()
 
     def on_mount(self) -> None:
@@ -109,17 +121,18 @@ class DropboxView(Vertical, can_focus=True):
     @on(Button.Pressed, "#btn-dropbox-toggle")
     def _toggle(self, event: Button.Pressed) -> None:
         event.stop()
+        # Busy from the click on, so a second click before the worker runs starts no second one
         if not self.busy:
+            self.busy = True
             self.switch(event.button.has_class("-start"))
 
     @work(group="switch")
     async def switch(self, starting: bool) -> None:
-        self.busy = True
         # The client says little while it starts or stops, and there is nothing to press meanwhile
         self.query_one("#btn-dropbox-toggle", Button).display = False
         self._show_label("starting" if starting else "stopping", "Starting..." if starting else "Stopping...")
         try:
-            await asyncio.to_thread(start if starting else stop)
+            await (start() if starting else stop())
         except (DropboxError, OSError) as error:
             self.app.notify(str(error), severity="error")
         finally:
@@ -170,8 +183,10 @@ class RecentFiles(Widget):
         self.files = files
         self.message = empty
         paths = [file.path for file in files]
-        self.cursor = paths.index(chosen.path) if chosen and chosen.path in paths else min(self.cursor, len(files) - 1)
-        self.cursor = max(self.cursor, 0)
+        if chosen and chosen.path in paths:
+            self.cursor = paths.index(chosen.path)
+        else:
+            self.cursor = max(0, min(self.cursor, len(files) - 1))
         # A row per file, so the height changes with their number
         self.refresh(layout=True)
 
@@ -208,12 +223,12 @@ class RecentFiles(Widget):
         bold = self.get_component_rich_style("dropbox--name")
         # The background alone: the selected row keeps its colors
         cursor = Style(bgcolor=self.get_component_rich_style("dropbox--cursor").bgcolor)
+        # Too long for a row, a path loses its start, so the file's own name stays
+        room = max(self.size.width - AGE, 2)
         lines = []
         for index, file in enumerate(self.files):
             line = Text(end="")
             line.append(f"{relative(file.modified, now):<{AGE}}", style=age)
-            # Too long for a row: its start goes, so the file's own name stays
-            room = max(self.size.width - AGE, 2)
             path = file.name if len(file.name) <= room else "…" + file.name[-(room - 1):]
             head, _, name = path.rpartition("/")
             if head:

@@ -11,14 +11,13 @@ from .clocks import DEFAULT_CLOCKS, Clock, find_zone
 from .months import WEEKDAY_NAMES
 from .weather import METRIC, UNITS
 
-CONFIG_DIR = Path.home() / ".config" / "outils"
-CONFIG_FILE = CONFIG_DIR / "config.yaml"
+CONFIG_FILE = Path.home() / ".config" / "outils" / "config.yaml"
 _UNITS_LINE = re.compile(r"^units:.*$", re.MULTILINE)
 
 
 @dataclass
 class Config:
-    """Optional, hand-edited settings."""
+    """Optional settings, written by hand; the app itself writes only the theme and the units."""
 
     # Set with t in the app; "terminal" reads the terminal's own colours, otherwise any
     # scheme in tui-kit (see tui_kit.theme.list_themes()).
@@ -29,9 +28,9 @@ class Config:
     location: str = "Portland, OR"
     # metric or imperial
     units: str = METRIC
-    # The clocks under the calendar, top to bottom
+    # The Time tab's clocks, top to bottom
     clocks: list[Clock] = field(default_factory=lambda: _clocks(DEFAULT_CLOCKS))
-    # Why the config file was ignored; the UI shows these
+    # What in the config file was left out, and why; the footer shows these
     warnings: list[str] = field(default_factory=list)
 
 
@@ -99,8 +98,9 @@ def _read_weather(data: Mapping, config: Config) -> None:
     units = data.get("units")
     if units is None:
         return
-    if str(units).strip().lower() in UNITS:
-        config.units = str(units).strip().lower()
+    name = str(units).strip().lower()
+    if name in UNITS:
+        config.units = name
     else:
         config.warnings.append(f"units: '{units}' is neither metric nor imperial, using metric")
 

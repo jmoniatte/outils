@@ -1,7 +1,6 @@
+import subprocess
 import unittest
 from unittest.mock import patch
-
-from tui_kit import processes
 
 from outils import nmcli
 from outils.nmcli import Network, NmcliError, parse_details, parse_profiles, parse_scan, parse_share, saved_list, split_terse
@@ -46,13 +45,11 @@ class ParseTest(unittest.TestCase):
         )
         self.assertEqual(parse_profiles(output), {"Home": "u1", "Cafe": "u2"})
 
-
     def test_saved_list_puts_profiles_in_range_first_then_the_others_by_name(self):
-        nearby = parse_scan(SCAN, saved={"Home:5G": "u1", "zoo": "u2", "Attic": "u3"})
-        saved = saved_list(nearby, {"Home:5G": "u1", "zoo": "u2", "Attic": "u3"})
+        profiles = {"Home:5G": "u1", "zoo": "u2", "Attic": "u3"}
+        saved = saved_list(parse_scan(SCAN, profiles), profiles)
         self.assertEqual([(n.ssid, n.in_range) for n in saved], [("Home:5G", True), ("Attic", False), ("zoo", False)])
         self.assertEqual(saved[2].saved_uuid, "u2")
-
 
     def test_details_combine_the_device_and_the_access_point_in_use(self):
         shown = (
@@ -133,13 +130,11 @@ class ConnectTest(unittest.TestCase):
             self.assertEqual(nmcli.disconnect(), "")
 
     def test_errors_carry_the_last_line_nmcli_printed(self):
-        with patch("subprocess.Popen") as popen:
-            popen.return_value.communicate.return_value = ("", "Warning: something\nError: No network with SSID 'x' found.\n")
-            popen.return_value.returncode = 10
+        failed = subprocess.CompletedProcess([], 10, "", "Warning: something\nError: No network with SSID 'x' found.\n")
+        with patch("tui_kit.processes.run", return_value=failed):
             with self.assertRaisesRegex(NmcliError, "^No network with SSID 'x' found.$"):
                 nmcli.run("device", "wifi", "connect", "x")
-        self.assertEqual(processes._running, set())
-        with patch("subprocess.Popen", side_effect=FileNotFoundError):
+        with patch("tui_kit.processes.run", side_effect=FileNotFoundError):
             with self.assertRaisesRegex(NmcliError, "not installed"):
                 nmcli.run("radio", "wifi")
 

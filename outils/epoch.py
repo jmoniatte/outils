@@ -10,6 +10,8 @@ MILLISECONDS = re.compile(r"[+-]?\d{13}")
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 # For "3 days ago": the unit and its length in seconds, largest first
 SPANS = (("year", 365 * 86400), ("day", 86400), ("hour", 3600), ("minute", 60), ("second", 1))
+# What rows gives, in order
+LABELS = ("Seconds", "UTC", "Local", "Relative")
 
 
 class EpochError(Exception):
@@ -18,8 +20,8 @@ class EpochError(Exception):
 
 def parse(text: str, now: datetime, local: tzinfo | None = None) -> datetime:
     """The moment text names: a timestamp in seconds, or milliseconds when it has 13 digits, or an
-    ISO date. A date without an offset is
-    local time, the system's when local is None; an empty box is now.
+    ISO date. A date without an offset is local time, the system's when local is None; an empty
+    box is now.
     """
     text = text.strip()
     if not text or text.lower() == "now":
@@ -51,23 +53,22 @@ def seconds(moment: datetime) -> str:
 def relative(moment: datetime, now: datetime) -> str:
     """How far moment is from now, in its largest unit: "3 days ago", "in 2 hours"."""
     delta = int((moment - now).total_seconds())
-    if abs(delta) < 1:
+    if not delta:
         return "now"
-    for name, length in SPANS:
-        if abs(delta) >= length:
-            count = abs(delta) // length
-            words = f"{count} {name}{'s' if count > 1 else ''}"
-            return f"in {words}" if delta > 0 else f"{words} ago"
-    return "now"
+    name, length = next(span for span in SPANS if abs(delta) >= span[1])
+    count = abs(delta) // length
+    words = f"{count} {name}{'s' if count > 1 else ''}"
+    return f"in {words}" if delta > 0 else f"{words} ago"
 
 
 def rows(moment: datetime, now: datetime, local: tzinfo | None = None) -> list[tuple[str, str]]:
-    """(label, value) for everything the view shows about moment; local None is the system's zone."""
+    """(label, value) for everything the view shows about moment, in LABELS order; local None is the system's zone."""
     # ISO 8601 both: milliseconds only when there are some
     timespec = "milliseconds" if moment.microsecond else "seconds"
-    return [
-        ("Seconds", seconds(moment)),
-        ("UTC", moment.astimezone(UTC).isoformat(timespec=timespec)),
-        ("Local", moment.astimezone(local).isoformat(timespec=timespec)),
-        ("Relative", relative(moment, now)),
-    ]
+    values = (
+        seconds(moment),
+        moment.astimezone(UTC).isoformat(timespec=timespec),
+        moment.astimezone(local).isoformat(timespec=timespec),
+        relative(moment, now),
+    )
+    return list(zip(LABELS, values, strict=True))

@@ -5,11 +5,10 @@ pactl talks to PulseAudio, or to PipeWire through pipewire-pulse, so this works 
 
 import json
 import re
-import subprocess
 from collections import Counter
 from dataclasses import dataclass, field, replace
 
-from tui_kit import processes
+from . import command
 
 TIMEOUT = 5
 # pavucontrol lets a slider go past 100% up to 153%; that distorts, so the keys stop here
@@ -68,12 +67,7 @@ class Mixer:
 
 
 def run(*args: str) -> str:
-    try:
-        result = processes.run(["pactl", *args], TIMEOUT)
-    except FileNotFoundError as error:
-        raise PactlError("pactl is not installed") from error
-    except subprocess.TimeoutExpired as error:
-        raise PactlError(f"pactl {args[0]} timed out") from error
+    result = command.run(["pactl", *args], PactlError, TIMEOUT)
     if result.returncode != 0:
         raise PactlError(result.stderr.strip() or f"pactl {args[0]} failed")
     return result.stdout

@@ -40,6 +40,9 @@ class ClocksView(Widget):
             self.minute = minute
             self.refresh()
 
+    def _style(self, name: str):
+        return self.get_component_rich_style(f"clocks--{name}")
+
     def render(self) -> Text:
         name_width = max((len(clock.name) for clock in self.clocks), default=0) + 3
         text = Text()
@@ -47,9 +50,9 @@ class ClocksView(Widget):
             reading = read(clock, self.minute)
             if index:
                 text.append("\n")
-            text.append(f"{reading.name:<{name_width}}", style=self.get_component_rich_style("clocks--name"))
-            text.append(reading.time, style=self.get_component_rich_style("clocks--time"))
-            text.append(f"   {reading.offset}", style=self.get_component_rich_style("clocks--offset"))
+            text.append(f"{reading.name:<{name_width}}", style=self._style("name"))
+            text.append(reading.time, style=self._style("time"))
+            text.append(f"   {reading.offset}", style=self._style("offset"))
             if reading.dst:
-                text.append(f" {DST_ICON}", style=self.get_component_rich_style("clocks--dst"))
+                text.append(f" {DST_ICON}", style=self._style("dst"))
         return text

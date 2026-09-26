@@ -4,14 +4,13 @@ import unittest
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from textual.app import App, ComposeResult
+from tui_kit.theme import load_palette
 
-from outils.app import load_stylesheet
 from outils.config import Config
 from outils.epoch import EpochError, parse, relative, rows
 from outils.widgets import TimeView
-from outils.widgets.time_view import EpochDetails
-from tui_kit.theme import load_palette
+
+from tests.host import Host
 
 NOW = datetime(2026, 9, 25, 5, 4, tzinfo=UTC)
 PORTLAND = ZoneInfo("America/Los_Angeles")
@@ -62,113 +61,101 @@ class EpochTest(unittest.TestCase):
         self.assertEqual(relative(datetime(2020, 1, 1, tzinfo=UTC), NOW), "6 years ago")
 
 
-class Host(App):
-    CSS = load_stylesheet()
-    # As in outils: the box must not take focus by itself
-    AUTO_FOCUS = None
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield TimeView(Config())
-
-
 class TimeViewTest(unittest.TestCase):
-    def test_enter_in_the_box_converts_under_it_and_an_error_shows_in_red(self):
+    def run_view(self, body):
         async def main():
-            app = Host()
+            app = Host(TimeView(Config()))
             async with app.run_test(size=(80, 24)) as pilot:
                 await pilot.pause()
-                details = app.query_one("#epoch-details")
-                box = app.query_one("#epoch-input")
-                # It opens on now, in seconds, in the box and under it
-                self.assertLessEqual(abs(int(box.value) - time.time()), 2)
-                self.assertTrue(box.has_class("-found"))
-                self.assertEqual(details.render().plain.split("\n")[0], f"Seconds   {box.value}")
-                self.assertTrue(details.render().plain.endswith("Relative  now"))
-                # The box starts where the values do
-                self.assertEqual(box.region.x, details.region.x + len("Relative  "))
-                # Clicked first: while the box has focus, now no longer fills it
-                await pilot.click("#epoch-input")
-                box.value = ""
-                await pilot.press(*"1790222400", "enter")
-                await pilot.pause()
-                lines = details.render().plain.split("\n")
-                self.assertEqual(lines[:2], ["Seconds   1790222400", "UTC       2026-09-24T04:00:00+00:00"])
-                # The box lets go, so ?, t and q work again, and turns blue; the values stay plain
-                self.assertIsNone(app.focused)
-                self.assertTrue(app.query_one("#epoch-input").has_class("-found"))
-                text = details.render()
-                self.assertEqual([text.plain[span.start:span.end].strip() for span in text.spans], ["Seconds", "UTC", "Local", "Relative"])
-                await pilot.click("#epoch-input")
-                box.value = ""
-                await pilot.press(*"soon", "enter")
-                await pilot.pause()
-                self.assertEqual(details.render().plain, "Not a timestamp or a date such as 2026-09-24 15:30: soon")
-                self.assertEqual(details.render().style.color.triplet.hex.lower(), load_palette("onedark")["red"].lower())
+                await body(app, pilot, app.view)
 
         asyncio.run(main())
+
+    def test_enter_in_the_box_converts_under_it_and_an_error_shows_in_red(self):
+        async def body(app, pilot, view):
+            details = app.query_one("#epoch-details")
+            box = app.query_one("#epoch-input")
+            # It opens on now, in seconds, in the box and under it
+            self.assertLessEqual(abs(int(box.value) - time.time()), 2)
+            self.assertTrue(box.has_class("-found"))
+            self.assertEqual(details.render().plain.split("\n")[0], f"Seconds   {box.value}")
+            self.assertTrue(details.render().plain.endswith("Relative  now"))
+            # The box starts where the values do
+            self.assertEqual(box.region.x, details.region.x + len("Relative  "))
+            # Clicked first: while the box has focus, now no longer fills it
+            await pilot.click("#epoch-input")
+            box.value = ""
+            await pilot.press(*"1790222400", "enter")
+            await pilot.pause()
+            lines = details.render().plain.split("\n")
+            self.assertEqual(lines[:2], ["Seconds   1790222400", "UTC       2026-09-24T04:00:00+00:00"])
+            # The box lets go, so ?, t and q work again, and turns blue; the values stay plain
+            self.assertIsNone(app.focused)
+            self.assertTrue(app.query_one("#epoch-input").has_class("-found"))
+            text = details.render()
+            self.assertEqual([text.plain[span.start:span.end].strip() for span in text.spans], ["Seconds", "UTC", "Local", "Relative"])
+            await pilot.click("#epoch-input")
+            box.value = ""
+            await pilot.press(*"soon", "enter")
+            await pilot.pause()
+            self.assertEqual(details.render().plain, "Not a timestamp or a date such as 2026-09-24 15:30: soon")
+            self.assertEqual(details.render().style.color.triplet.hex.lower(), load_palette("onedark")["red"].lower())
+
+        self.run_view(body)
 
     def test_the_box_follows_now_until_it_is_used(self):
-        async def main():
-            app = Host()
-            async with app.run_test(size=(80, 24)) as pilot:
-                await pilot.pause()
-                view = app.query_one(TimeView)
-                box = app.query_one("#epoch-input")
-                # As if a second had gone by since
-                view.shown = box.value = "1"
-                view.follow_now()
-                self.assertLessEqual(abs(int(box.value) - time.time()), 2)
-                # Not while it is typed in, nor with an edit in it
-                await pilot.click("#epoch-input")
-                view.shown = box.value = "1"
-                view.follow_now()
-                self.assertEqual(box.value, "1")
-                view.screen.set_focus(None)
-                box.value = "17902"
-                view.follow_now()
-                self.assertEqual(box.value, "17902")
-                # An empty box follows again, but not once something was converted
-                await pilot.click("#epoch-input")
-                box.value = ""
-                await pilot.press("enter")
-                await pilot.pause()
-                view.shown = box.value = "1"
-                view.follow_now()
-                self.assertNotEqual(box.value, "1")
-                now_button = app.query_one("#btn-now")
-                self.assertFalse(now_button.visible)
-                await pilot.click("#epoch-input")
-                box.value = "1790222400"
-                await pilot.press("enter")
-                view.follow_now()
-                self.assertEqual(box.value, "1790222400")
-                # Now shows once there is something to go back from, and goes back to following now
-                self.assertTrue(now_button.visible)
-                await pilot.click("#btn-now")
-                await pilot.pause()
-                self.assertLessEqual(abs(int(box.value) - time.time()), 2)
-                self.assertFalse(now_button.visible)
-                self.assertIsNone(app.focused)
+        async def body(app, pilot, view):
+            box = app.query_one("#epoch-input")
+            # As if a second had gone by since
+            view.shown = box.value = "1"
+            view.follow_now()
+            self.assertLessEqual(abs(int(box.value) - time.time()), 2)
+            # Not while it is typed in, nor with an edit in it
+            await pilot.click("#epoch-input")
+            view.shown = box.value = "1"
+            view.follow_now()
+            self.assertEqual(box.value, "1")
+            view.screen.set_focus(None)
+            box.value = "17902"
+            view.follow_now()
+            self.assertEqual(box.value, "17902")
+            # An empty box follows again, but not once something was converted
+            await pilot.click("#epoch-input")
+            box.value = ""
+            await pilot.press("enter")
+            await pilot.pause()
+            view.shown = box.value = "1"
+            view.follow_now()
+            self.assertNotEqual(box.value, "1")
+            now_button = app.query_one("#btn-now")
+            self.assertFalse(now_button.visible)
+            await pilot.click("#epoch-input")
+            box.value = "1790222400"
+            await pilot.press("enter")
+            view.follow_now()
+            self.assertEqual(box.value, "1790222400")
+            # Now shows once there is something to go back from, and goes back to following now
+            self.assertTrue(now_button.visible)
+            await pilot.click("#btn-now")
+            await pilot.pause()
+            self.assertLessEqual(abs(int(box.value) - time.time()), 2)
+            self.assertFalse(now_button.visible)
+            self.assertIsNone(app.focused)
 
-        asyncio.run(main())
+        self.run_view(body)
 
     def test_how_far_from_now_keeps_up_with_the_time(self):
-        async def main():
-            app = Host()
-            async with app.run_test(size=(80, 24)) as pilot:
-                await pilot.pause()
-                details = app.query_one(EpochDetails)
-                details.show(NOW, NOW)
-                self.assertTrue(details.render().plain.endswith("Relative  now"))
-                details.move_to(NOW.replace(second=2))
-                self.assertTrue(details.render().plain.endswith("Relative  2 seconds ago"))
-                details.move_to(NOW.replace(minute=6))
-                self.assertTrue(details.render().plain.endswith("Relative  2 minutes ago"))
+        async def body(app, pilot, view):
+            details = app.query_one("#epoch-details")
+            view.moment = NOW
+            view.measure(NOW)
+            self.assertTrue(details.render().plain.endswith("Relative  now"))
+            view.measure(NOW.replace(second=2))
+            self.assertTrue(details.render().plain.endswith("Relative  2 seconds ago"))
+            view.measure(NOW.replace(minute=6))
+            self.assertTrue(details.render().plain.endswith("Relative  2 minutes ago"))
 
-        asyncio.run(main())
+        self.run_view(body)
 
 
 if __name__ == "__main__":

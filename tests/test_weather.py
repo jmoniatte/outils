@@ -56,7 +56,7 @@ class PickPlaceTest(unittest.TestCase):
 
 class FindPlaceTest(unittest.TestCase):
     def test_a_place_is_looked_up_once_then_read_from_the_cache(self):
-        with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.get_json", return_value={"results": RESULTS}) as get:
+        with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.ask", return_value={"results": RESULTS}) as get:
             cache = Path(tmp) / "outils" / "places.json"
             first = find_place("Victoria, BC", cache)
             second = find_place("Victoria, BC", cache)
@@ -66,7 +66,7 @@ class FindPlaceTest(unittest.TestCase):
             self.assertEqual(json.loads(cache.read_text())["Victoria, BC"]["region"], "British Columbia")
 
     def test_an_unknown_place_is_an_error(self):
-        with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.get_json", return_value={}):
+        with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.ask", return_value={}):
             with self.assertRaisesRegex(WeatherError, "does not know 'Nowhere'"):
                 find_place("Nowhere", Path(tmp) / "places.json")
 
@@ -80,17 +80,18 @@ class ForecastTest(unittest.TestCase):
         self.assertEqual(result.days[1].high, 13.2)
 
     def test_units_reach_open_meteo_and_errors_become_weather_errors(self):
-        with patch("outils.weather.find_place", return_value=PLACE), patch("outils.weather.get_json", return_value=FORECAST) as get:
+        with patch("outils.weather.find_place", return_value=PLACE), patch("outils.weather.ask", return_value=FORECAST) as get:
             weather.forecast("Victoria, BC", IMPERIAL)
             self.assertEqual(get.call_args.args[1]["temperature_unit"], "fahrenheit")
             weather.forecast("Victoria, BC", METRIC)
             self.assertNotIn("temperature_unit", get.call_args.args[1])
-        with patch("outils.weather.urlopen", side_effect=URLError("no network")):
-            with self.assertRaisesRegex(WeatherError, "Cannot reach Open-Meteo: no network"):
-                weather.get_json(weather.FORECAST_URL, {})
-        with patch("outils.weather.urlopen", side_effect=HTTPError("u", 400, "Bad", {}, io.BytesIO())):
-            with self.assertRaisesRegex(WeatherError, "answered 400"):
-                weather.get_json(weather.FORECAST_URL, {})
+        for failure, message in (
+            ({"side_effect": URLError("no network")}, "Cannot reach Open-Meteo: no network"),
+            ({"side_effect": HTTPError("u", 400, "Bad", {}, io.BytesIO())}, "Open-Meteo answered 400"),
+            ({"return_value": io.BytesIO(b"<html>")}, "Open-Meteo did not answer with JSON"),
+        ):
+            with patch("outils.web.urlopen", **failure), self.assertRaisesRegex(WeatherError, message):
+                weather.ask(weather.FORECAST_URL, {})
 
     def test_describe_names_the_code_and_gives_the_moon_on_a_clear_night(self):
         self.assertEqual(describe(63)[0], "Rain")

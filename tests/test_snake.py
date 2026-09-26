@@ -5,14 +5,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from textual.app import App, ComposeResult
-
-from outils.app import OutilsApp, load_stylesheet
+from outils.app import OutilsApp
 from outils.config import Config
 from outils.snake import DOWN, LEFT, RIGHT, UP, Game, read_best, save_best
 from outils.widgets import SnakeView
 from outils.widgets.snake_view import OVER, PAUSED, PLAYING, READY, SnakeBoard, score_level
+from tests.host import Host
 from tui_kit.theme import load_palette
+
+COLORS = {name: value.lower() for name, value in load_palette("onedark").items()}
 
 
 def game(width=10, height=6, snake=((5, 3), (4, 3), (3, 3)), food=(9, 0)):
@@ -93,25 +94,15 @@ class GameTest(unittest.TestCase):
         self.assertEqual([score_level(0, 0), score_level(3, 0)], ["-record", "-record"])
 
 
-class Host(App):
-    CSS = load_stylesheet()
-
-    def __init__(self, view: SnakeView) -> None:
-        super().__init__()
-        self.view = view
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield self.view
-
-    def on_mount(self) -> None:
-        self.view.focus()
-
-
 def board(app) -> list[str]:
     return app.query_one(SnakeBoard).render().plain.split("\n")
+
+
+def color(app, x: int, row: int) -> str:
+    """The color of the character at x on the board's row."""
+    text = app.query_one(SnakeBoard).render()
+    width = len(text.plain.split("\n")[0]) + 1
+    return next(span.style for span in text.spans if span.start <= row * width + x < span.end).color.triplet.hex.lower()
 
 
 def side(app) -> list[str]:
@@ -166,7 +157,7 @@ class SnakeViewTest(unittest.TestCase):
             self.assertEqual(side(app), ["Paused", "Press Space", "Best 0", "Score 0"])
             # Each state in its color
             state = app.query_one("#snake-state")
-            self.assertEqual(state.styles.color.hex.lower(), load_palette("onedark")["yellow"].lower())
+            self.assertEqual(state.styles.color.hex.lower(), COLORS["yellow"])
             # A turn resumes it; hjkl and wasd steer like the arrows
             await pilot.press("k")
             self.assertEqual(view.state, PLAYING)
@@ -177,23 +168,12 @@ class SnakeViewTest(unittest.TestCase):
 
     def test_the_splash_screen_is_a_snake_shaped_like_an_s_with_the_title_and_the_food(self):
         async def body(app, pilot, view):
-            text = app.query_one(SnakeBoard).render()
-            lines = text.plain.split("\n")
-            width = len(lines[0]) + 1
-            palette = load_palette("onedark")
-
-            def color(x, row):
-                style = next(span.style for span in text.spans if span.start <= row * width + x < span.end)
-                return style.color.triplet.hex.lower()
-
+            lines = board(app)
             # 17 by 13 cells: the 12 by 5 picture sits 2 cells in and 4 down, its tail back to the wall
             self.assertEqual(lines[9], "█" * 17 + " " * 6 + "██" + " " * 10 + "█")
             self.assertEqual(lines[7].rstrip(" █"), "█      ██████████  S N A K E")
-            self.assertEqual(color(1, 9), palette["green"].lower())
-            # The head, yellow, ends the S top right; the food, red, is under the title
-            self.assertEqual(color(21, 6), palette["yellow"].lower())
-            self.assertEqual(color(23, 9), palette["red"].lower())
-            self.assertEqual(color(19, 7), palette["yellow"].lower())
+            # The tail green; the head, yellow, ends the S top right; the food, red, is under the title
+            self.assertEqual([color(app, x, row) for x, row in ((1, 9), (21, 6), (23, 9), (19, 7))], [COLORS["green"], COLORS["yellow"], COLORS["red"], COLORS["yellow"]])
 
         self.run_view(body)
 
@@ -207,21 +187,20 @@ class SnakeViewTest(unittest.TestCase):
             self.assertEqual(view.state, OVER)
             self.assertEqual(view.game.crash, (17, 5))
             self.assertEqual(side(app), ["Game over", "Press Space", "New best!", "Best 7", "Score 7"])
-            self.assertEqual(app.query_one("#snake-state").styles.color.hex.lower(), load_palette("onedark")["red"].lower())
+            self.assertEqual(app.query_one("#snake-state").styles.color.hex.lower(), COLORS["red"])
             # The board is left whole, for a screenshot
             self.assertEqual({line.strip("█▄▀ ") for line in board(app)}, {""})
             self.assertEqual(read_best(self.best_file), 7)
             # The score in blue: it set the record
-            palette = load_palette("onedark")
             score = app.query_one("#snake-score")
-            self.assertEqual(score.styles.color.hex.lower(), palette["blue"].lower())
+            self.assertEqual(score.styles.color.hex.lower(), COLORS["blue"])
             # Space goes back to the splash screen with a new board, and space again starts it
             await pilot.press("space")
             self.assertEqual((view.state, view.game.score, view.game.crash), (READY, 0, None))
             self.assertIn("S N A K E", "".join(board(app)))
             self.assertEqual(side(app), ["Ready", "Press Space", "Best 7", "Score 0"])
             # A new game starts at nothing of the best: red
-            self.assertEqual(score.styles.color.hex.lower(), palette["red"].lower())
+            self.assertEqual(score.styles.color.hex.lower(), COLORS["red"])
             await pilot.press("space")
             self.assertEqual(view.state, PLAYING)
             # r starts a new game at once, from any state
@@ -238,34 +217,24 @@ class SnakeViewTest(unittest.TestCase):
             view.game.snake.clear()
             view.game.snake.extend([(2, 0), (1, 0), (0, 1)])
             view.game.food = (5, 1)
-            palette = {name: load_palette("onedark")[name].lower() for name in ("comment", "green", "yellow", "red")}
 
-            def colors():
-                text = app.query_one(SnakeBoard).render()
-                lines = text.plain.split("\n")
-                width = len(lines[0]) + 1
+            def at(x, row):
+                return (board(app)[row][x], color(app, x, row))
 
-                def at(x, row):
-                    style = next(span.style for span in text.spans if span.start <= row * width + x < span.end)
-                    return (lines[row][x], style.color.triplet.hex.lower())
-
-                return at
-
-            at = colors()
             # The wall is a character thick at the sides, half of one on top and under, hugging the board
-            self.assertEqual({at(x, 0) for x in range(36)}, {("▄", palette["comment"])})
-            self.assertEqual({at(x, 14) for x in range(36)}, {("▀", palette["comment"])})
-            self.assertEqual([at(x, 1) for x in (0, 35)], [("█", palette["comment"])] * 2)
+            self.assertEqual({at(x, 0) for x in range(36)}, {("▄", COLORS["comment"])})
+            self.assertEqual({at(x, 14) for x in range(36)}, {("▀", COLORS["comment"])})
+            self.assertEqual([at(x, 1) for x in (0, 35)], [("█", COLORS["comment"])] * 2)
             # A cell is two characters, a character in: the body, then the head; the food under them
-            self.assertEqual([at(x, 1) for x in (3, 4)], [("█", palette["green"])] * 2)
-            self.assertEqual([at(x, 1) for x in (5, 6)], [("█", palette["yellow"])] * 2)
-            self.assertEqual(at(1, 2), ("█", palette["green"]))
-            self.assertEqual([at(x, 2) for x in (11, 12)], [("█", palette["red"])] * 2)
+            self.assertEqual([at(x, 1) for x in (3, 4)], [("█", COLORS["green"])] * 2)
+            self.assertEqual([at(x, 1) for x in (5, 6)], [("█", COLORS["yellow"])] * 2)
+            self.assertEqual(at(1, 2), ("█", COLORS["green"]))
+            self.assertEqual([at(x, 2) for x in (11, 12)], [("█", COLORS["red"])] * 2)
             # A crash into a wall shows red in it: over that cell on top, its one character at a side
             view.game.crash = (4, -1)
-            self.assertEqual([colors()(x, 0) for x in (9, 10)], [("▄", palette["red"])] * 2)
+            self.assertEqual([at(x, 0) for x in (9, 10)], [("▄", COLORS["red"])] * 2)
             view.game.crash = (17, 3)
-            self.assertEqual(colors()(35, 4), ("█", palette["red"]))
+            self.assertEqual(at(35, 4), ("█", COLORS["red"]))
 
         self.run_view(body)
 

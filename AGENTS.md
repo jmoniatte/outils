@@ -22,8 +22,8 @@ every message, errors included, goes to the footer, in Help's place (see Modes).
 - Do not git commit unless asked
 - Keep the shortcuts few: the ones on the Help panel are the whole set
 - The help screen lists every binding that has a description and a `group`
-  (`tui_kit.shortcuts.ACTIONS` or `GENERAL`) in `OutilsApp.HELP_BINDINGS` and
-  `OutilsApp.BINDINGS`; document a new key there
+  (`tui_kit.shortcuts.ACTIONS` or `GENERAL`) in `OutilsApp.BINDINGS` and in the tab's view's
+  `BINDINGS` (or its `HELP_BINDINGS`); document a new key there
 - Never hardcode a color in a `.tcss` file
 
 ## Run
@@ -62,7 +62,8 @@ uv run python -m unittest discover -s tests
 uv run ruff check .
 ```
 
-There is no pytest. `ruff` is pinned in the `dev` dependency group, so use `uv run ruff`.
+There is no pytest. A view's tests show it alone in `tests/host.py`'s `Host`, in outils's styles and
+onedark's colors. `ruff` is pinned in the `dev` dependency group, so use `uv run ruff`.
 tui-kit comes from GitHub's master (`[tool.uv.sources]`); after a push there,
 `uv lock --upgrade-package tui-kit` picks it up. To work on both at once, switch that source to
 the commented-out `../tui-kit` path.
@@ -72,6 +73,7 @@ the commented-out `../tui-kit` path.
 ```
 outils/                 # git root + pyproject.toml (run uv commands here)
   outils/               # Python package
+    __init__.py         # The version, the repository's URL and CACHE_DIR (~/.cache/outils, XDG_CACHE_HOME respected)
     app.py              # OutilsApp, a tui-kit BaseApp: MODES, the footer and its messages, the keys
     __main__.py         # The command line: which tab to open on
     config.py           # Optional ~/.config/outils/config.yaml (theme, through tui_kit.config; week_start,
@@ -82,6 +84,9 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
     life.py             # The Game of Life's rules on a grid that wraps around; no Textual
     snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
+    command.py          # Runs a tab's command (pactl, bluetoothctl, nmcli) through tui-kit, failures as the tab's error; no Textual
+    click_only.py       # Widgets a click must not give focus to, so the view keeps its keys; quick_button takes every click
+    web.py              # JSON from a web service (Open-Meteo, ipinfo.io) with urllib, failures as the tab's error; no Textual
     remote.py           # `outils --show <mode>`: tell an outils already running which tab to show, over a Unix socket; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
     dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
@@ -95,7 +100,7 @@ outils/                 # git root + pyproject.toml (run uv commands here)
                         # dropbox_view.py, sound_view.py, wifi_view.py, life_view.py, snake_view.py);
                         # device_card.py is one sound device on one line, networks_table.py a Wi-Fi list;
                         # month_view.py draws one month, clocks_view.py the time tab's clocks;
-                        # lookup_box.py is the box the time, weather and IP tabs type in
+                        # lookup_box.py, the time, weather and IP tabs' box to type in and rows of what was found
     styles/outils.tcss  # outils's own styles, joined after tui-kit's (app.STYLE_FILES)
 ```
 
@@ -137,9 +142,11 @@ Close cannot take focus, so a click leaves the mode's keys working. App tests pa
 the first one is the default. Help (`OutilsHelpScreen`, `screens/help_screen.py`, tui-kit's with
 two columns of outils' own) lists the app's keys under General on the left, and the tab's own on
 the right under the tab's name: the view's `BINDINGS`, or its `HELP_BINDINGS` when it has more
-(`OutilsApp.HELP_BINDINGS`, set when its tab shows), of either group. Each column is as
+(`OutilsApp.action_help` passes the view on show), of either group. Each column is as
 wide as its longest line and at least General's width (`min-width: 24`), so a tab with no keys of
-its own still gets a panel of a fair size. A new mode is a view in `widgets/` and an entry in `MODES`;
+its own still gets a panel of a fair size. Every view gets the `mode` class, which gives all tabs
+the same padding (a view that sizes what it draws reads `self.size`, the area inside it). A new
+mode is a view in `widgets/` and an entry in `MODES`;
 `__main__` offers it on its own.
 
 ## Calendar
@@ -176,35 +183,40 @@ Portland, Chicago, UTC and Strasbourg. A zone Python's `zoneinfo` does not know 
 the footer and is left out. The view checks the time every second and redraws when the minute
 turns; it makes no request.
 
-Under the clocks and a rule (`#time-rule`), an Epoch box (a `LookupBox`) converts what Enter
-finds there. It opens on now,
-in seconds, and follows it every second (`follow_now`) until it is used: never while the box has
-focus or holds an edit, and not once something typed was converted. The green Now button beside
-the box, shown only while the box is not following now (hidden with `visible`, so it keeps its
-place), goes back to following it, as does Enter on an empty box. Now cannot take focus. Laid out like the
-IP tab, the box then turns blue (what was typed, or the seconds for an empty box) and
-`EpochDetails` shows the result a row per line, in plain text: the timestamp in seconds, the date in UTC and here, both ISO 8601 with their offset (`+00:00` for UTC), and how far it
-is from now, redrawn every second so "2 seconds ago" stays true. `epoch.parse`
-reads a number as seconds (a fraction is kept), or as milliseconds when it is 13 digits with no
-fraction (2001 to 2286; as seconds, 13 digits would be past year 33000); anything else goes to
-`datetime.fromisoformat`, and a date with no offset is local time, the system's (summer time
-included, through `astimezone`). An empty box, or `now`, is now. What is neither shows in red in
-place of the rows, as on the IP tab.
+The Time, Weather and IP tabs share a layout, in `widgets/lookup_box.py`: a row
+(`lookup_row`) with a green label and a `LookupBox` to type in, over what was found. On Time and
+IP that is a `LookupDetails`, a row per label and value, the labels green; `lookup_row` makes the
+box's label as wide as the details' labels, so the box lines up with the values. An error shows
+in red in place of the rows.
+
+Under the clocks and a rule (`#time-rule`), an Epoch box converts what Enter finds there. It
+opens on now, in seconds, and follows it every second (`follow_now`) until it is used: never
+while the box has focus or holds an edit, and not once something typed was converted. The green
+Now button beside the box, shown only while the box is not following now (hidden with
+`visible`, so it keeps its place), goes back to following it, as does Enter on an empty box. Now
+cannot take focus. The box then turns blue (what was typed, or the seconds for an empty box) and
+the rows give the timestamp in seconds, the date in UTC and here, both ISO 8601 with their offset
+(`+00:00` for UTC), and how far it is from now, redrawn every second (`TimeView.measure`) so
+"2 seconds ago" stays true. `epoch.parse` reads a number as seconds (a fraction is kept), or as
+milliseconds when it is 13 digits with no fraction (2001 to 2286; as seconds, 13 digits would be
+past year 33000); anything else goes to `datetime.fromisoformat`, and a date with no offset is
+local time, the system's (summer time included, through `astimezone`). An empty box, or `now`,
+is now.
 
 ## Weather
 
-`weather.py` talks to Open-Meteo with the standard library (urllib), no account and no key; its
-calls block, so `ForecastView.load` runs `weather.forecast` in a worker. Failures raise
+`weather.py` talks to Open-Meteo through `web.get_json` (urllib), no account and no key; its
+calls block, so `WeatherView.load` runs `weather.forecast` in a worker. Failures raise
 `WeatherError`, shown in the view and in the footer.
 
 `WeatherView` is a City box over a `ForecastView`. It opens on `location` from `config.yaml`
 (`Portland, OR` by default), and Enter in the box looks up what was typed; the forecast on show
 stays until the new one comes. Once found, the place replaces the text in the box, in full and
-in blue (`ForecastView.Found`, then `LookupBox.show_found`), which is the only place the forecast says
-where it is for; clicking the box turns it back to plain text to type over. The app sets `AUTO_FOCUS = None` so the box never takes focus by
-itself (it would swallow `?`, `t` and `q`); it has focus only once clicked, and lets go after
-Enter or Escape (a `LookupBox` binding, so Escape there does not quit). The IP tab uses the
-same box. A typed city is not saved.
+in blue (`LookupBox.show_found`), which is the only place the forecast says where it is for;
+clicking the box turns it back to plain text to type over. The app sets `AUTO_FOCUS = None` so
+the box never takes focus by itself (it would swallow `?`, `t` and `q`); it has focus only once
+clicked, and lets go after Enter or Escape (a `LookupBox` binding, so Escape there does not
+quit). A typed city is not saved.
 
 A place is "City", or "City" with qualifiers after commas ("City, Region, Country"). `find_place` asks Open-Meteo's
 geocoding for the city and `pick_place` chooses among the answers: the exact name first (it lists
@@ -213,14 +225,14 @@ in full or by initials ("BC", "Hong Kong" for HK), or a US state or Canadian pro
 postal code (`REGION_CODES`: "OR", "ME", "QC"). A single word never matches by its first letter,
 or "ME" would find Multnomah County. A place's own label ("Portland, Maine, United States"), as
 the box shows it, finds that place again, so Enter on an untouched box is harmless. The result is cached in
-`~/.cache/outils/places.json` (`XDG_CACHE_HOME` respected), keyed by the location text, so opening
+`~/.cache/outils/places.json` (`outils.CACHE_DIR`), keyed by the location text, so opening
 the pop-up costs one request. `units` is `metric` (the default) or `imperial`, passed to
 Open-Meteo, which converts. °C and °F, right of the City box (`#weather-units`, buttons that
 cannot take focus), switch them, the one in use in bold blue: the place on show is asked again
-in the other units (`ForecastView.location`), and `WeatherView.UnitsChanged` has the app write
+in the other units (`WeatherView.location`), and `WeatherView.UnitsChanged` has the app write
 `units:` to `config.yaml` (`config.save_units`, which leaves the rest of the file as it was).
 
-`ForecastView` shows the place, the weather now (icon, temperature, words, then feels like,
+`ForecastView` shows the weather now (icon, temperature, words, then feels like,
 wind, humidity and rain), then one row per day for `weather.DAYS` days, today first and the
 others by their full day name. Icons are Nerd Font weather glyphs, as the Sound tab uses Nerd Font
 battery icons; a clear night gets the moon. The colors come from TCSS through the view's
@@ -228,27 +240,26 @@ component classes (high orange, low cyan, rain chance blue).
 
 ## IP
 
-`IpView` is an IP box (a `LookupBox`, as on the weather tab) over an `IpDetails`; its label is
-as wide as the details' labels, so the box lines up with the values, as on the time tab. The first time
-it shows, it asks about this computer's public address; Enter in the box asks about what was
-typed, and an empty box goes back to this computer's. Once found, the box turns blue and shows
-the address, except a host name, which stays as typed (the IP row gives its address), and `IpDetails` shows one row per field in `ipinfo.FIELDS` order, the
-address first and in bold blue, skipping
-any field ipinfo.io leaves out (and its `readme` link).
+`IpView` is an IP box over an `IpDetails` (a `LookupDetails`). The first time it shows, it asks
+about this computer's public address; Enter in the box asks about what was typed, and an empty
+box goes back to this computer's. Once found, the box turns blue and shows the address, except a
+host name, which stays as typed (the IP row gives its address), and `IpDetails` shows one row per
+field in `ipinfo.FIELDS` order, the address first and in bold blue, skipping any field ipinfo.io
+leaves out (and its `readme` link).
 
 `ipinfo.fetch(target)` asks `https://ipinfo.io/json` for this computer's address, or
-`https://ipinfo.io/<address>/json` for another (no account, no key), with urllib. ipinfo.io
+`https://ipinfo.io/<address>/json` for another (no account, no key), through `web.get_json`. ipinfo.io
 takes addresses only, so `resolve` turns a host name into one first, with a final dot so the
 system's search domain is not tried (a wildcard there answers for any name). A private or
 reserved address is refused before any request: ipinfo.io only answers `bogon` for it. Failures
-raise `IpInfoError`, shown in red in place of the details and, unlike the other tabs, not in the footer. ipinfo.io limits unauthenticated requests
+raise `IpInfoError`, shown in red in place of the details and, unlike the Weather tab, not in the footer. ipinfo.io limits unauthenticated requests
 per day, far above what opening a pop-up uses.
 
 ## Dropbox
 
 `DropboxView` starts or stops the Dropbox client on this computer, with a button over the right
-end of the list, and shows the files that changed last in the Dropbox folder. It uses only the `dropbox` command (`dropbox.py`, with
-subprocess), which talks to the local daemon: no account and no network. It has no history of
+end of the list, and shows the files that changed last in the Dropbox folder. It uses only the `dropbox` command (`dropbox.py`, through
+`tui_kit.processes.run`), which talks to the local daemon: no account and no network. It has no history of
 what synced, so the files are the `RECENT` (200) with the latest modified times under the folder
 (`~/.dropbox/info.json` names it, `~/Dropbox` by default), skipping the client's `.dropbox` and
 `.dropbox.cache`. A downloaded file keeps the time it was changed elsewhere, not when it synced.
@@ -260,8 +271,10 @@ does: stop quits the whole app, it does not pause, so nothing syncs until it sta
 (red) takes the button's place (`#dropbox-state`, hidden otherwise). A failure goes to the
 footer. `dropbox stop` only asks the daemon to quit and returns at once, while `dropbox status`
 still answers for a few seconds, so `dropbox.stop` waits until it says not running
-(`STOP_TIMEOUT`). `dropbox start` gets no pipes, since the daemon it launches would hold them open and the
-call would never return. With no `dropbox` command, a red line says so in place of the button.
+(`STOP_TIMEOUT`). `dropbox start` gets no pipes (plain `subprocess.Popen`), since the daemon it launches would hold
+them open and the call would never return. `start` and `stop` are coroutines that check every
+`CHECK` seconds, not blocking calls in a thread: Python waits for its threads before it exits, so
+quitting during "Stopping..." would wait for the daemon. With no `dropbox` command, a red line says so in place of the button.
 The view asks every `POLL` seconds, only while its tab shows (`on_show` and `on_hide`).
 
 `RecentFiles` shows a row per file: how long ago (`epoch.relative`), then its path, the folder dimmer than
@@ -286,12 +299,13 @@ after it: the name (green and bold for the device in use, no other marker) and b
 volume figure (grey when muted, no "muted" text) and bar, Mute or Unmute, then Connect /
 Disconnect for headphones. Everything right of the name has a fixed width and the name column
 takes the rest (`1fr`, capped by `max-width`, and never below the longest name, which
-`SoundView.show` sets as its `min-width`), so the bars line up and names are never cut. With
+`DeviceCard.set_columns` sets as its `min-width`), so the bars line up and names are never cut. With
 today's devices that needs about 70 columns. The battery is a Nerd Font level icon and the
 percentage (`battery_text`, `󰁽 40%`); a terminal without a Nerd Font shows a box for the icon.
 It is dropped when it does not fit whole (`DeviceCard._fit_battery`). The Bluetooth button is
-only hidden (`visible`) on wired devices, to keep its column; `SoundView.show` removes the
-column when no headphones are paired. the user tried a two-line card with its own background
+only hidden (`visible`) on wired devices, to keep its column, and so is Mute on headphones with no
+sink, so their Connect lines up with the Disconnect of others; `DeviceCard.set_columns` removes the
+Bluetooth column when no headphones are paired. The user tried a two-line card with its own background
 and a colored left edge, and preferred this. The output and microphone in use are always
 highlighted, and so is the focused card, with `$bg-light` over the name, figure and bar only:
 the buttons' `$color 30%` backgrounds would change over it, so the gaps in that stretch are
@@ -324,8 +338,8 @@ new device, since the default only applies to streams opened afterwards; a sourc
 recording a monitor stays. A device's volume is the mean of its channels; setting it sets every
 channel, so balance is lost.
 
-Volume keys and mute redraw the row at once through `SoundView.replace`, then run pactl in the
-`change` worker, then `status_bar.refresh`. `SoundView._pactl_lock` runs pactl calls one at a
+Volume keys and mute redraw the row at once through `SoundView.redraw`, then run pactl in the
+`_change` worker, then `status_bar.refresh`. `SoundView._pactl_lock` runs pactl calls one at a
 time, so a held key lands in order. Every change and a timer every `REFRESH_SECONDS` reload
 everything, the timer only while the tab shows (`tab_shown` and `tab_hidden`); a pactl failure while
 reloading is shown in the footer once, not every 2 seconds (`SoundView._load_error`). `MAX_VOLUME` caps the keys at 100%. Every volume set here is a multiple of `VOLUME_STEP`:
@@ -336,9 +350,9 @@ value; it is shown as it is.
 A card takes focus only while the tab shows (`SoundView.showing`), since `TabbedContent` would
 switch to the tab of a hidden card with focus: `tab_shown` puts it on the output in use, or the
 first load does. The view gives Help the card's keys as well as its own
-(`SoundView.HELP_BINDINGS`, which `_show_mode` reads when a view has it).
+(`SoundView.HELP_BINDINGS`, which Help reads when a view has it).
 
-Every `pactl` and `bluetoothctl` call runs in a worker thread through `tui_kit.processes.run`.
+Every `pactl` and `bluetoothctl` call runs in a worker thread through `command.run` (tui-kit's `processes.run`).
 Python waits for those threads before it exits, so tui-kit's `BaseApp` kills whatever is still
 running when the app unmounts; otherwise quitting during a slow call (a connect can take 20
 seconds) waits for it.
@@ -378,23 +392,24 @@ buttons, right over the app's footer rule. `tab` moves between outils' own tabs,
 switch lists (`NetworksTable.SwitchList`); the table has no use for them. `WifiView` stops the
 inner `TabActivated`, and `OutilsApp.mode_tabs` names outils' own row of tabs, not this one. The
 lists bake their colors into Rich text, which `refresh_css` does not reach, so
-`OutilsApp.apply_theme` calls `WifiView.set_colors` with colors from `BaseApp.palette`.
+`WifiView.set_colors` repaints them from `BaseApp.palette` on a theme change (see Themes).
 
 `nmcli.scan` reads `nmcli -t device wifi list` and `parse_scan` merges access points into one
 `Network` per SSID: the one in use wins, else the strongest. Hidden SSIDs are dropped. Saved
 profiles are matched by their `802-11-wireless.ssid`, not their name, and carried as
 `Network.saved_uuid`; every later nmcli call names a profile by UUID. `nmcli.scan` returns a
 `Scan` with both tabs' lists: `saved_list` adds a `Network` with `in_range=False` for each saved
-profile the scan did not see. Tab labels carry the counts; the footer status only shows while
-scanning, connecting, or when Wi-Fi is off.
+profile the scan did not see. Tab labels carry the counts; the footer shows the time of the last
+scan, or in its place a status while scanning or connecting, when Wi-Fi is off, or when there is no
+internet or a login page.
 
 The first time the tab shows, and on `r`, it shows NetworkManager's cached list at once, then
-runs `--rescan yes`, which takes around 10 seconds; later shows only read the cached list. `nmcli.run` goes through `tui_kit.processes.run`, and Python waits for
+runs `--rescan yes`, which takes around 10 seconds; later shows only read the cached list. `nmcli.run` goes through `command.run` (tui-kit's `processes.run`), and Python waits for
 worker threads before it exits, so tui-kit's `BaseApp` kills the nmcli processes still running
 when the app unmounts; otherwise quitting during a rescan hangs until it ends. A timer refreshes the cached list every `REFRESH_SECONDS` while the tab shows (`tab_shown` and
-`tab_hidden`), and skips while a scan or a connect is running so it never cancels one.
+`tab_hidden`), and skips while a scan or a connect is running so it never cancels one. An nmcli failure while loading is shown in the footer once, as on the Sound tab.
 
-Joining (`WifiView._connect_requested`): the network in use and ones not in range do nothing; saved and open ones
+Joining (`WifiView._connect_requested`): the network in use opens its details; saved and open ones
 connect at once; 802.1X ones are refused with a hint; the rest open `PasswordScreen`, which runs
 the connect itself and stays open on an error. The password reaches nmcli on stdin through
 `--ask`, never in argv. When a new connect fails, `nmcli.connect` deletes the profile nmcli made
@@ -403,7 +418,7 @@ for it. `WifiView.connecting` holds the SSID being joined; disconnect and forget
 `i` (or Enter on the network in use) opens `DetailsScreen` with `nmcli.details()`: `device show`
 for the addresses, plus the `*` row of `wifi list` for the access point, on its Details tab.
 The Password tab (`p`), with a QR code button under the password (`c`), comes from `ShareTabsScreen`,
-which calls `nmcli.share(uuid)` the first time either is asked for: `nmcli -s` reads the
+the panel both screens share (`DetailsScreen.panes` adds the Details tab before it), which calls `nmcli.share(uuid)` the first time either is asked for: `nmcli -s` reads the
 profile's key-mgmt and password, which NetworkManager gives the session's owner without a
 prompt. Tab cycles the tabs (the app's `tab` steps aside while a panel is up). The code opens
 alone over the whole window (`QrScreen`, closed by any key or a click), "Scan to join" and the
@@ -474,7 +489,8 @@ a new board, back to `ready`. The best score is kept in `~/.cache/outils/snake.j
 
 `t` opens tui-kit's theme picker and the choice is saved to `~/.config/outils/config.yaml`; there
 is no Settings panel. Anything drawn with Rich instead of TCSS must take its colors from
-`BaseApp.palette` and be repainted in an `apply_theme` override.
+`BaseApp.palette`, and its view repaints it in a `set_colors` method, which `OutilsApp.apply_theme`
+calls on every view that has one.
 
 ## Versions
 

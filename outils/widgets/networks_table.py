@@ -8,9 +8,9 @@ from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.message import Message
 from textual.widgets import DataTable
+from tui_kit.shortcuts import ACTIONS, GENERAL
 
 from ..nmcli import Network
-from tui_kit.shortcuts import ACTIONS, GENERAL
 
 # (key, width); the SSID column fits the longest SSID the standard allows
 COLUMNS = (
@@ -27,11 +27,11 @@ BARS = "▂▄▆█"
 class NetworkColors:
     """The palette entries the list bakes into Rich text, where TCSS variables do not reach."""
 
-    current: str = ""
-    dim: str = ""
-    strong: str = ""
-    fair: str = ""
-    weak: str = ""
+    current: str
+    dim: str
+    strong: str
+    fair: str
+    weak: str
 
 
 def signal_text(signal: int, colors: NetworkColors) -> Text:
@@ -111,7 +111,13 @@ class NetworksTable(DataTable):
         # Dim text on the cursor's background is too faint to read
         dim = "" if highlighted else self._colors.dim
         if not network.in_range:
-            return (Text(""), Text(network.ssid, style=dim, no_wrap=True, overflow="ellipsis"), Text(""), Text("not in range", style=dim), Text(""))
+            return (
+                Text(""),
+                Text(network.ssid, style=dim, no_wrap=True, overflow="ellipsis"),
+                Text(""),
+                Text("not in range", style=dim),
+                Text(""),
+            )
         return (
             Text("●" if network.in_use else "", style=self._colors.current),
             Text(network.ssid, style=style, no_wrap=True, overflow="ellipsis"),
@@ -123,15 +129,20 @@ class NetworksTable(DataTable):
     def action_switch_list(self) -> None:
         self.post_message(self.SwitchList())
 
+    def _row_under(self, event: events.MouseEvent) -> int | None:
+        """The row under the pointer, or None when it is not over one."""
+        row = event.style.meta.get("row")
+        return row if isinstance(row, int) and 0 <= row < self.row_count else None
+
     def on_mouse_move(self, event: events.MouseMove) -> None:
         # The highlight follows the pointer as it does with the arrow keys
-        row = event.style.meta.get("row")
-        if isinstance(row, int) and 0 <= row < self.row_count and row != self.cursor_row:
+        row = self._row_under(event)
+        if row is not None and row != self.cursor_row:
             self.move_cursor(row=row)
 
     async def _on_click(self, event: events.Click) -> None:
-        row = event.style.meta.get("row")
-        if not (isinstance(row, int) and 0 <= row < self.row_count):
+        row = self._row_under(event)
+        if row is None:
             return
         # Handled here rather than by DataTable, which only selects a row on a second click in the same cell
         event.prevent_default()

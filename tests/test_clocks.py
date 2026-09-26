@@ -3,14 +3,14 @@ import unittest
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from textual.app import App, ComposeResult
+from tui_kit.theme import load_palette
 
-from outils.app import load_stylesheet
 from outils.clocks import Clock, Reading, read
 from outils.config import Config
 from outils.widgets import ClocksView
 from outils.widgets.clocks_view import DST_ICON
-from tui_kit.theme import load_palette
+
+from tests.host import Host
 
 SUMMER = datetime(2026, 9, 25, 5, 4, 30, tzinfo=UTC)
 WINTER = datetime(2026, 1, 15, 5, 4, tzinfo=UTC)
@@ -30,20 +30,6 @@ class ReadTest(unittest.TestCase):
         # Half hours, either side of UTC
         self.assertEqual(read(clock("Delhi", "Asia/Kolkata"), SUMMER).offset, "+05:30")
         self.assertEqual(read(clock("St. John's", "America/St_Johns"), WINTER).offset, "-03:30")
-
-
-class Host(App):
-    CSS = load_stylesheet()
-
-    def __init__(self, view: ClocksView) -> None:
-        super().__init__()
-        self.view = view
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield self.view
 
 
 class ClocksViewTest(unittest.TestCase):

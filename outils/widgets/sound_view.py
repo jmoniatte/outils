@@ -1,17 +1,24 @@
 import asyncio
 from dataclasses import replace
 
-from tui_kit.shortcuts import GENERAL
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
+from tui_kit.shortcuts import GENERAL
 
 from .. import bluetooth, pactl, status_bar
 from ..bluetooth import BluetoothError
 from ..config import Config
 from ..pactl import MAX_VOLUME, Device, Mixer, PactlError
-from .device_card import BluetoothRequested, DefaultRequested, DeviceCard, MuteRequested, VolumeRequested, card_id
+from .device_card import (
+    BluetoothRequested,
+    DefaultRequested,
+    DeviceCard,
+    MuteRequested,
+    VolumeRequested,
+    card_id,
+)
 
 # Mixer's fields, in screen order; a line separates them rather than a title
 SECTIONS = ("outputs", "inputs")
@@ -60,9 +67,7 @@ class SoundView(Vertical):
     def tab_shown(self) -> None:
         """The tab shows: focus on the output in use, and ask pactl until it hides."""
         self.showing = True
-        in_use = next((card for card in self.cards("outputs") if card.device.default), None)
-        if target := in_use or next(iter(self.cards()), None):
-            target.focus()
+        self._focus_card()
         self.load_mixer()
         self.timer.resume()
 
@@ -77,8 +82,15 @@ class SoundView(Vertical):
         sections = [section_id] if section_id else SECTIONS
         return [card for section in sections for card in self.query_one(f"#{section}-cards").query(DeviceCard)]
 
+    def _focus_card(self, wanted_id: str | None = None) -> None:
+        """Focus on the card with that id, else on the output in use, else on the first card."""
+        cards = self.cards()
+        in_use = [card for card in self.cards("outputs") if card.device.default]
+        if target := next((card for card in cards if card.id == wanted_id), None) or next(iter(in_use + cards), None):
+            target.focus()
+
     def _is_busy(self, device: Device) -> bool:
-        return bool(device.mac) and self.bluetooth_busy is not None and device.mac == self.bluetooth_busy.mac
+        return self.bluetooth_busy is not None and device.mac == self.bluetooth_busy.mac
 
     async def show(self, mixer: Mixer) -> None:
         focused = self.screen.focused
@@ -93,26 +105,20 @@ class SoundView(Vertical):
                     card.update(device, busy=self._is_busy(device))
             else:
                 await container.remove_children()
-                new_cards = [DeviceCard(device) for device in devices]
-                for card in new_cards:
-                    card.busy = self._is_busy(card.device)
-                await container.mount_all(new_cards)
+                await container.mount_all(DeviceCard(device, busy=self._is_busy(device)) for device in devices)
             # No microphone plugged in, as on a desktop without a headset: drop the section and its line
             container.display = bool(devices)
-        devices = (*mixer.outputs, *mixer.inputs)
-        has_headphones = any(device.mac for device in devices)
-        # Every name whole: the name column is never narrower than the longest one, plus its padding
-        longest = max((len(device.label) for device in devices), default=0) + 2
+        every_device = (*mixer.outputs, *mixer.inputs)
+        has_headphones = any(device.mac for device in every_device)
+        # Every name whole: the name column is never narrower than the longest one
+        longest = max((len(device.label) for device in every_device), default=0)
         for card in self.cards():
-            card.query_one(".btn-bluetooth").display = has_headphones
-            card.query_one(".card-label").styles.min_width = longest
-        if self.showing and not isinstance(self.screen.focused, DeviceCard) and (cards := self.cards()):
-            # Back on the device that had focus; on first show, on the output in use
-            by_id = {card.id: card for card in cards}
-            in_use = next((card for card in self.cards("outputs") if card.device.default), None)
-            (by_id.get(focused_id) or in_use or cards[0]).focus()
+            card.set_columns(longest, has_headphones)
+        if self.showing and not isinstance(self.screen.focused, DeviceCard):
+            # Back on the device that had focus once its section was remounted; on first load, on the output in use
+            self._focus_card(focused_id)
 
-    def replace(self, device: Device) -> None:
+    def redraw(self, device: Device) -> None:
         """Redraw one device with new values, before pactl has confirmed them."""
         for card in self.cards():
             if card.id == card_id(device):
@@ -137,8 +143,7 @@ class SoundView(Vertical):
     @work(exclusive=True, group="sound-load")
     async def load_mixer(self) -> None:
         try:
-            async with self._pactl_lock:
-                mixer = await asyncio.to_thread(pactl.mixer)
+            mixer = await self._mixer()
         except PactlError as error:
             # Said once, not on every reload, while pactl keeps failing
             if str(error) != self._load_error:
@@ -149,6 +154,10 @@ class SoundView(Vertical):
         headsets = await asyncio.to_thread(bluetooth.headsets)
         await self.show(bluetooth.merge(mixer, headsets))
 
+    async def _mixer(self) -> Mixer:
+        async with self._pactl_lock:
+            return await asyncio.to_thread(pactl.mixer)
+
     @on(VolumeRequested)
     def _volume_requested(self, event: VolumeRequested) -> None:
         event.stop()
@@ -157,14 +166,14 @@ class SoundView(Vertical):
         if volume == device.volume:
             return
         # Shown at once, so holding the key does not wait on pactl
-        self.replace(replace(device, volume=volume))
+        self.redraw(replace(device, volume=volume))
         self._change(pactl.set_volume, device, volume)
 
     @on(MuteRequested)
     def _mute_requested(self, event: MuteRequested) -> None:
         event.stop()
         device = event.device
-        self.replace(replace(device, muted=not device.muted))
+        self.redraw(replace(device, muted=not device.muted))
         self._change(pactl.set_mute, device, not device.muted)
 
     @on(DefaultRequested)
@@ -211,8 +220,7 @@ class SoundView(Vertical):
     async def _wait_for_sink(self, mac: str) -> Device | None:
         """The sink of headphones that just connected; PipeWire takes a moment to make it."""
         for _ in range(int(SINK_WAIT_SECONDS / SINK_POLL_SECONDS)):
-            async with self._pactl_lock:
-                mixer = await asyncio.to_thread(pactl.mixer)
+            mixer = await self._mixer()
             if sink := next((device for device in mixer.outputs if device.mac == mac), None):
                 return sink
             await asyncio.sleep(SINK_POLL_SECONDS)

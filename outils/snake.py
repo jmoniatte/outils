@@ -5,10 +5,11 @@ running into a wall or into itself ends the game.
 """
 
 import json
-import os
 import random
 from collections import deque
 from pathlib import Path
+
+from . import CACHE_DIR
 
 Cell = tuple[int, int]
 
@@ -18,7 +19,7 @@ START_LENGTH = 3
 # Turns pressed faster than the snake moves wait their turn, up to this many
 QUEUED_TURNS = 2
 # Where the best score is kept between games
-BEST_FILE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "outils" / "snake.json"
+BEST_FILE = CACHE_DIR / "snake.json"
 
 
 class Game:
@@ -46,8 +47,8 @@ class Game:
     def turn(self, direction: Cell) -> None:
         """Head that way at the next free step; a turn back onto itself, or no turn at all, is ignored."""
         last = self.turns[-1] if self.turns else self.direction
-        reverse = (direction[0] == -last[0] and direction[1] == -last[1])
-        if direction == last or reverse or len(self.turns) >= QUEUED_TURNS:
+        reverse = (-last[0], -last[1])
+        if direction in (last, reverse) or len(self.turns) >= QUEUED_TURNS:
             return
         self.turns.append(direction)
 

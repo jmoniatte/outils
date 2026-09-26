@@ -8,9 +8,10 @@ from textual.containers import Horizontal
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Static
-
-from ..pactl import MAX_VOLUME, Device
 from tui_kit.shortcuts import ACTIONS
+
+from ..click_only import click_only
+from ..pactl import MAX_VOLUME, Device
 
 # Every volume set here is a multiple of this
 VOLUME_STEP = 5
@@ -118,10 +119,10 @@ class DeviceCard(Horizontal, can_focus=True):
         Binding("c", "bluetooth", "Connect / disconnect", group=ACTIONS),
     ]
 
-    def __init__(self, device: Device) -> None:
+    def __init__(self, device: Device, busy: bool = False) -> None:
         super().__init__(id=card_id(device), classes="device-card")
         self.device = device
-        self.busy = False
+        self.busy = busy
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="card-label"):
@@ -132,14 +133,8 @@ class DeviceCard(Horizontal, can_focus=True):
         yield VolumeBar(classes="card-bar")
         # Blank, in the figure's and the bar's place on headphones with no sink: their Connect button says it
         yield Static("", classes="card-state")
-        yield self._button("", "btn-mute")
-        yield self._button("", "btn-bluetooth")
-
-    @staticmethod
-    def _button(label: str, name: str) -> Button:
-        button = Button(label, classes=name)
-        button.can_focus = False  # A click must not pull focus off the card
-        return button
+        yield click_only(Button("", classes="btn-mute"))
+        yield click_only(Button("", classes="btn-bluetooth"))
 
     def on_mount(self) -> None:
         self.update(self.device)
@@ -157,7 +152,7 @@ class DeviceCard(Horizontal, can_focus=True):
 
         bluetooth = self.query_one(".btn-bluetooth", Button)
         # Hidden but still taking its room, so the columns of wired devices line up with the headphones';
-        # MixerView drops the column altogether when there are no headphones
+        # set_columns drops the column altogether when there are no headphones
         bluetooth.visible = bool(device.mac)
         bluetooth.label = "Wait..." if self.busy else "Disconnect" if device.connected else "Connect"
         bluetooth.disabled = self.busy
@@ -170,9 +165,17 @@ class DeviceCard(Horizontal, can_focus=True):
         bar.display = volume.display = device.playable
         state.display = not device.playable
         mute = self.query_one(".btn-mute", Button)
-        mute.display = device.playable
+        # Hidden but taking its room, so a Connect button lines up with the other cards' Disconnect
+        mute.visible = device.playable
         mute.label = "Unmute" if device.muted else "Mute"
         mute.set_class(device.muted, "-unmute")
+
+    def set_columns(self, name_width: int, bluetooth: bool) -> None:
+        """Line the card up with the others: the name column fits the longest name, and the Bluetooth one is there
+        only when some device has headphones."""
+        # The name column's padding counts in its min-width
+        self.query_one(".card-label").styles.min_width = name_width + 2
+        self.query_one(".btn-bluetooth").display = bluetooth
 
     def on_resize(self) -> None:
         self._fit_battery()
@@ -216,9 +219,8 @@ class DeviceCard(Horizontal, can_focus=True):
         target, _ = self.screen.get_widget_at(event.screen_x, event.screen_y)
         bar = self.query_one(".card-bar", VolumeBar)
         if target is bar:
-            volume = bar.volume_at(event.screen_x - bar.content_region.x)
-            if self.device.playable and volume != self.device.volume:
-                self.post_message(VolumeRequested(self.device, volume))
+            if self.device.playable:
+                self.post_message(VolumeRequested(self.device, bar.volume_at(event.screen_x - bar.content_region.x)))
         elif any(target.has_class(name) for name in HIGHLIGHTED):
             self.action_use()
 

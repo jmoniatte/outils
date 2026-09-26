@@ -1,18 +1,14 @@
 import asyncio
 
-from rich.text import Text
+from rich.style import Style
 from textual import on, work
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.widget import Widget
-from textual.widgets import Input, Static
+from textual.containers import Vertical
+from textual.widgets import Input
 
 from ..config import Config
 from ..ipinfo import FIELDS, IpInfoError, fetch, rows
-from .lookup_box import LookupBox
-
-# The longest label and two spaces; the IP label is as wide in the TCSS, to line up the box
-LABEL = max(len(label) for _, label in FIELDS) + 2
+from .lookup_box import LookupBox, LookupDetails, lookup_row
 
 
 class IpView(Vertical):
@@ -30,10 +26,10 @@ class IpView(Vertical):
         self.asked = False
 
     def compose(self) -> ComposeResult:
-        with Horizontal(classes="lookup-row"):
-            yield Static("IP", classes="lookup-label")
-            yield LookupBox(placeholder="Address or host name, empty for this computer's", id="ip-address")
-        yield IpDetails()
+        details = IpDetails()
+        box = LookupBox(placeholder="Address or host name, empty for this computer's", id="ip-address")
+        yield lookup_row("IP", box, label_width=details.label_width)
+        yield details
 
     def on_show(self) -> None:
         # Asked the first time its tab shows, so opening another tab costs no request
@@ -45,7 +41,6 @@ class IpView(Vertical):
     def _address_submitted(self, event: Input.Submitted) -> None:
         event.stop()
         self.load(event.value.strip())
-        self.screen.set_focus(None)
 
     @work(exclusive=True)
     async def load(self, target: str = "") -> None:
@@ -54,7 +49,7 @@ class IpView(Vertical):
         try:
             data = await asyncio.to_thread(fetch, target)
         except IpInfoError as error:
-            # In place of the details, not in the header: it answers what was typed
+            # In place of the details, not in the footer: it answers what was typed
             details.show([], str(error))
             return
         # A host name stays as typed: the IP row gives its address
@@ -62,35 +57,14 @@ class IpView(Vertical):
         details.show(rows(data))
 
 
-class IpDetails(Widget):
-    """Where ipinfo.io places the address and whose network it is on, a row per field.
+class IpDetails(LookupDetails):
+    """Where ipinfo.io places the address and whose network it is on, a row per field, the address first."""
 
-    The colors come from TCSS through the component classes, so a theme change repaints them.
-    """
-
-    COMPONENT_CLASSES = {"ip--label", "ip--address", "ip--message", "ip--error"}
+    COMPONENT_CLASSES = {"ip--address"}
 
     def __init__(self) -> None:
-        super().__init__(id="ip-details")
-        self.rows: list[tuple[str, str]] = []
-        self.message = "Asking ipinfo.io..."
-        self.error = ""
+        super().__init__((label for _, label in FIELDS), "Asking ipinfo.io...", id="ip-details")
 
-    def show(self, rows: list[tuple[str, str]], error: str = "") -> None:
-        self.rows = rows
-        self.error = error
-        self.refresh(layout=True)
-
-    def render(self) -> Text:
-        if self.error:
-            return Text(self.error, style=self.get_component_rich_style("ip--error"))
-        if not self.rows:
-            return Text(self.message, style=self.get_component_rich_style("ip--message"))
-        text = Text()
-        for index, (label, value) in enumerate(self.rows):
-            if index:
-                text.append("\n")
-            text.append(f"{label:<{LABEL}}", style=self.get_component_rich_style("ip--label"))
-            # The address is what the tab is for
-            text.append(value, style=self.get_component_rich_style("ip--address") if index == 0 else "")
-        return text
+    def value_style(self, index: int) -> Style | str:
+        # The address is what the tab is for
+        return self.get_component_rich_style("ip--address") if index == 0 else ""

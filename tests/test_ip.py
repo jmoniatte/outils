@@ -6,15 +6,15 @@ import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
-from textual.app import App, ComposeResult
 from textual.widgets import Input
 
-from outils.app import OutilsApp, load_stylesheet
+from outils.app import OutilsApp
 from outils.config import Config
 from outils.ipinfo import IpInfoError, fetch, resolve, rows
 from outils.widgets import IpView
-from outils.widgets.ip_view import LABEL, IpDetails
-from tui_kit.theme import load_palette
+from outils.widgets.ip_view import IpDetails
+
+from tests.host import Host, settle
 
 ANSWER = {
     "ip": "97.115.117.246",
@@ -49,24 +49,23 @@ class IpInfoTest(unittest.TestCase):
         self.assertEqual(rows({"ip": "1.2.3.4", "hostname": ""}), [("IP", "1.2.3.4")])
 
     def test_fetch_reads_the_answer_and_turns_failures_into_errors(self):
-        with patch("outils.ipinfo.urlopen", return_value=io.BytesIO(json.dumps(ANSWER).encode())) as urlopen:
+        with patch("outils.web.urlopen", return_value=io.BytesIO(json.dumps(ANSWER).encode())) as urlopen:
             self.assertEqual(fetch()["ip"], "97.115.117.246")
         self.assertEqual(urlopen.call_args.args[0], "https://ipinfo.io/json")
         for failure, message in (
             (URLError("no network"), "Cannot reach ipinfo.io: no network"),
             (HTTPError("u", 429, "Too many", {}, io.BytesIO()), "answered 429"),
         ):
-            with patch("outils.ipinfo.urlopen", side_effect=failure), self.assertRaisesRegex(IpInfoError, message):
+            with patch("outils.web.urlopen", side_effect=failure), self.assertRaisesRegex(IpInfoError, message):
                 fetch()
-        with patch("outils.ipinfo.urlopen", return_value=io.BytesIO(b"<html>")), self.assertRaisesRegex(IpInfoError, "JSON"):
+        with patch("outils.web.urlopen", return_value=io.BytesIO(b"<html>")), self.assertRaisesRegex(IpInfoError, "JSON"):
             fetch()
-        with patch("outils.ipinfo.urlopen", return_value=io.BytesIO(b"{}")), self.assertRaisesRegex(IpInfoError, "address"):
+        with patch("outils.web.urlopen", return_value=io.BytesIO(b"{}")), self.assertRaisesRegex(IpInfoError, "address"):
             fetch()
-
 
     def test_fetch_asks_about_an_address_or_a_host_name_and_refuses_private_ones(self):
         def asked(target):
-            with patch("outils.ipinfo.urlopen", return_value=io.BytesIO(json.dumps(ANSWER).encode())) as urlopen:
+            with patch("outils.web.urlopen", return_value=io.BytesIO(json.dumps(ANSWER).encode())) as urlopen:
                 fetch(target)
             return urlopen.call_args.args[0]
 
@@ -76,7 +75,7 @@ class IpInfoTest(unittest.TestCase):
             self.assertEqual(asked("google.com"), "https://ipinfo.io/142.250.69.206/json")
         lookup.assert_called_once_with("google.com.", None)
         self.assertEqual(resolve("8.8.8.8"), "8.8.8.8")
-        with patch("outils.ipinfo.urlopen") as urlopen:
+        with patch("outils.web.urlopen") as urlopen:
             with self.assertRaisesRegex(IpInfoError, "192.168.1.1 is a private address"):
                 fetch("192.168.1.1")
             with (
@@ -87,34 +86,10 @@ class IpInfoTest(unittest.TestCase):
             urlopen.assert_not_called()
 
 
-class Host(App):
-    CSS = load_stylesheet()
-    AUTO_FOCUS = None
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.messages: list[str] = []
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield IpView(Config())
-
-    def notify(self, message, **kwargs) -> None:
-        self.messages.append(message)
-
-
-async def settle(app, pilot):
-    await pilot.pause()
-    await app.workers.wait_for_complete()
-    await pilot.pause()
-
-
 class IpViewTest(unittest.TestCase):
     def run_view(self, body, **patches):
         async def main():
-            app = Host()
+            app = Host(IpView(Config()))
             with patch("outils.widgets.ip_view.fetch", **patches) as fetch:
                 async with app.run_test(size=(90, 24)) as pilot:
                     await settle(app, pilot)
@@ -138,7 +113,7 @@ class IpViewTest(unittest.TestCase):
             self.assertEqual(lines[-1], "Network      AS209 CenturyLink Communications, LLC")
             self.assertEqual(len(lines), 9)
             # The box starts where the values do
-            self.assertEqual(box.region.x, details.region.x + LABEL)
+            self.assertEqual(box.region.x, details.region.x + len("Postal code  "))
 
         self.run_view(body, return_value=ANSWER)
 
@@ -176,12 +151,12 @@ class IpViewTest(unittest.TestCase):
 
         self.run_view(body, return_value=ANSWER)
 
-    def test_an_error_shows_in_place_of_the_details_and_not_in_the_header(self):
+    def test_an_error_shows_in_place_of_the_details_and_not_in_the_footer(self):
         async def body(app, pilot, fetch):
             details = app.query_one(IpDetails)
             self.assertEqual(details.render().plain, "Cannot reach ipinfo.io: no network")
-            self.assertEqual(details.render().style, details.get_component_rich_style("ip--error"))
-            self.assertEqual(details.get_component_rich_style("ip--error").color.triplet.hex.lower(), app.get_css_variables()["red"].lower())
+            self.assertEqual(details.render().style, details.get_component_rich_style("lookup--error"))
+            self.assertEqual(details.get_component_rich_style("lookup--error").color.triplet.hex.lower(), app.get_css_variables()["red"].lower())
             self.assertEqual(app.messages, [])
 
         self.run_view(body, side_effect=IpInfoError("Cannot reach ipinfo.io: no network"))

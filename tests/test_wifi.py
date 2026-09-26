@@ -5,13 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tui_kit.dialog import ConfirmDialog
-from tui_kit.header_notification import HeaderNotification
 from textual.widgets import TabbedContent, TabPane
-
+from tui_kit.dialog import ConfirmDialog
 from tui_kit.theme import load_palette
 
-from outils.app import OutilsApp
+from outils.app import FooterMessage, OutilsApp
 from outils.config import Config
 from outils.nmcli import Details, Network, NmcliError, Scan, Share
 from outils.qr import wifi_qr
@@ -20,6 +18,7 @@ from outils.screens.qr_screen import QrScreen
 from outils.widgets import WifiView
 from outils.widgets.networks_table import NetworksTable
 from outils.widgets.wifi_view import LOGIN_PAGE_URL
+from tests.host import footer_message, settle
 
 HOME = Network("Home", signal=70, security="WPA3", frequency=6295, in_use=True, saved_uuid="u1")
 CAFE = Network("Cafe", signal=90, security="WPA2", frequency=2437)
@@ -30,26 +29,12 @@ DETAILS = Details("wlp1s0", "Home", "u1", "WPA3", 6295, 69, 70, addresses=("192.
 SCAN = Scan(nearby=[HOME, CAFE, WORK, OFFICE], saved=[HOME, WORK, OLD])
 
 
-def header_message(app: OutilsApp) -> str:
-    notification = app.screen.query_one(HeaderNotification)
-    return notification.render().plain if notification.display else ""
-
-
 def status(app: OutilsApp) -> str:
     return str(app.query_one("#networks-status").render())
 
 
 def nearby_table(app: OutilsApp) -> NetworksTable:
     return app.query_one("#nearby-table", NetworksTable)
-
-
-async def settle(app: OutilsApp, pilot) -> None:
-    while True:
-        await pilot.pause()
-        if not any(worker.is_running for worker in app.workers):
-            break
-        await app.workers.wait_for_complete()
-    await pilot.pause()
 
 
 class WifiTest(unittest.TestCase):
@@ -80,6 +65,20 @@ class WifiTest(unittest.TestCase):
                     await body(app, pilot, mocks)
 
         asyncio.run(main())
+
+    def test_an_nmcli_failure_while_loading_is_said_once_in_the_footer(self):
+        async def body(app, pilot, mocks):
+            mocks["scan"].side_effect = NmcliError("NetworkManager is not running")
+            view = app.query_one(WifiView)
+            view.load_networks()
+            await settle(app, pilot)
+            self.assertEqual((footer_message(app), status(app)), ("NetworkManager is not running", "Scan failed"))
+            app.query_one(FooterMessage).clear_notification()
+            view.load_networks()
+            await settle(app, pilot)
+            self.assertEqual(footer_message(app), "")
+
+        self.run_app(body)
 
     def test_lists_networks_with_the_current_one_first_and_marked(self):
         async def body(app, pilot, mocks):
@@ -123,7 +122,7 @@ class WifiTest(unittest.TestCase):
             await settle(app, pilot)
             self.assertNotIsInstance(app.screen, PasswordScreen)
             self.assertEqual(mocks["connect"].call_args.args, (CAFE, "good"))
-            self.assertEqual(header_message(app), "Connected to Cafe")
+            self.assertEqual(footer_message(app), "Connected to Cafe")
 
         self.run_app(body, connect=connect)
 
@@ -135,7 +134,7 @@ class WifiTest(unittest.TestCase):
             self.assertEqual(table.cursor_row, 2)
             self.assertNotIsInstance(app.screen, PasswordScreen)
             mocks["connect"].assert_called_once_with(WORK)
-            self.assertEqual(header_message(app), "Connected to Work")
+            self.assertEqual(footer_message(app), "Connected to Work")
 
         self.run_app(body)
 
@@ -145,7 +144,7 @@ class WifiTest(unittest.TestCase):
             await pilot.press("enter")
             await settle(app, pilot)
             self.assertEqual(
-                header_message(app),
+                footer_message(app),
                 "Could not connect to Work: Timed out. Press f to forget it and enter the password again",
             )
             self.assertIsNone(app.query_one(WifiView).connecting)
@@ -158,7 +157,7 @@ class WifiTest(unittest.TestCase):
             await pilot.press("enter")
             await settle(app, pilot)
             self.assertNotIsInstance(app.screen, PasswordScreen)
-            self.assertIn("802.1X", header_message(app))
+            self.assertIn("802.1X", footer_message(app))
 
         self.run_app(body)
 
@@ -177,17 +176,17 @@ class WifiTest(unittest.TestCase):
             await pilot.click("#confirm-btn")
             await settle(app, pilot)
             mocks["forget"].assert_called_once_with(HOME)
-            self.assertEqual(header_message(app), "Forgot Home")
+            self.assertEqual(footer_message(app), "Forgot Home")
 
             nearby_table(app).move_cursor(row=1)
             await pilot.press("f")
             await settle(app, pilot)
-            self.assertEqual(header_message(app), "Cafe is not saved")
+            self.assertEqual(footer_message(app), "Cafe is not saved")
 
             await pilot.press("d")
             await settle(app, pilot)
             mocks["disconnect"].assert_called_once()
-            self.assertEqual(header_message(app), "Disconnected from Home")
+            self.assertEqual(footer_message(app), "Disconnected from Home")
 
         self.run_app(body)
 
@@ -285,7 +284,7 @@ class WifiTest(unittest.TestCase):
             await settle(app, pilot)
             # The button is on the Password tab, under the password
             self.assertFalse(app.screen.query_one("#btn-qr").region)
-            await pilot.click("#details-tabs Tab#--content-tab-password")
+            await pilot.click("#network-tabs Tab#--content-tab-password")
             await settle(app, pilot)
             await pilot.click("#btn-qr")
             await settle(app, pilot)
@@ -305,7 +304,7 @@ class WifiTest(unittest.TestCase):
             await pilot.press("i")
             await settle(app, pilot)
             self.assertNotIsInstance(app.screen, DetailsScreen)
-            self.assertEqual(header_message(app), "Not connected to Wi-Fi")
+            self.assertEqual(footer_message(app), "Not connected to Wi-Fi")
 
         self.run_app(body, details=None)
 
@@ -331,7 +330,7 @@ class WifiTest(unittest.TestCase):
             wifi_button.press()
             await settle(app, pilot)
             mocks["set_wifi"].assert_called_with(True)
-            self.assertEqual(header_message(app), "Wi-Fi turned on")
+            self.assertEqual(footer_message(app), "Wi-Fi turned on")
             self.assertEqual(nearby_table(app).networks, SCAN.nearby)
             self.assertEqual(status(app), "")
             self.assertEqual((str(wifi_button.label), wifi_button.has_class("-off")), ("Wi-Fi off", True))
@@ -361,7 +360,7 @@ class WifiTest(unittest.TestCase):
                 await pilot.press("o")
                 await settle(app, pilot)
             open_url.assert_not_called()
-            self.assertEqual(header_message(app), "This network does not ask for a login page")
+            self.assertEqual(footer_message(app), "This network does not ask for a login page")
 
         self.run_app(body, connectivity="limited")
 

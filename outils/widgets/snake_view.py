@@ -1,19 +1,19 @@
 import random
+from collections.abc import Callable
 
-from tui_kit.shortcuts import ACTIONS
 from rich.style import Style
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.events import Resize
 from textual.message import Message
 from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Static
+from tui_kit.shortcuts import ACTIONS
 
 from ..config import Config
-from ..snake import DIRECTIONS, Game, read_best, save_best
+from ..snake import DIRECTIONS, Cell, Game, read_best, save_best
 
 READY, PLAYING, PAUSED, OVER = "ready", "playing", "paused", "over"
 # Characters a cell is wide: two side by side, one row tall, make a square
@@ -57,10 +57,11 @@ def score_level(score: int, best: int) -> str:
 
 class SnakeView(Horizontal, can_focus=True):
     """The game of snake: a walled board, 4:3 at most, then right of it the state and "Press Space"
-    when the game waits for it at the top, the best score over the score at the bottom. Nothing is written on the board once
-    a game has started, so a screenshot shows it whole. The best score is kept between games.
+    when the game waits for it at the top, the best score over the score at the bottom. Nothing is
+    written on the board once a game has started, so a screenshot shows it whole. The best score is
+    kept between games.
 
-    It starts paused, on the keys to play; it pauses when its tab is left.
+    It starts ready, on the splash screen; it pauses when its tab is left.
     """
 
     BINDINGS = [
@@ -81,7 +82,7 @@ class SnakeView(Horizontal, can_focus=True):
         self.timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
-        yield SnakeBoard()
+        yield SnakeBoard(self.game)
         with Vertical(id="snake-side"):
             yield Static("", id="snake-state")
             yield Static("Press Space", id="snake-prompt")
@@ -91,9 +92,9 @@ class SnakeView(Horizontal, can_focus=True):
             yield Static("", id="snake-score")
 
     def on_mount(self) -> None:
-        self._show_score()
+        self._show_side()
 
-    def on_resize(self, event: Resize) -> None:
+    def on_resize(self) -> None:
         # As tall as there is room for, and as wide as SHAPE allows, the room left permitting
         rows = self.content_size.height - 2
         widest = (self.content_size.width - SIDE - 2) // CELL
@@ -106,11 +107,7 @@ class SnakeView(Horizontal, can_focus=True):
             self._pause()
 
     def on_snake_board_resized(self, event: "SnakeBoard.Resized") -> None:
-        # A new size is a new board: back to the start
-        self.game = Game(event.columns, event.rows, self.rng)
-        self._stop()
-        self.state = READY
-        self._redraw()
+        self._ready(event.columns, event.rows)
 
     def action_turn(self, name: str) -> None:
         if self.state == OVER:
@@ -123,17 +120,22 @@ class SnakeView(Horizontal, can_focus=True):
         if self.state == PLAYING:
             self._pause()
         elif self.state == OVER:
-            # Back to the splash screen, with a new board; space again starts it
-            self.game = Game(self.game.width, self.game.height, self.rng)
-            self.state = READY
-            self._redraw()
+            # Space again starts it
+            self._ready(self.game.width, self.game.height)
         else:
             self._play()
 
     def action_restart(self) -> None:
-        self.game = Game(self.game.width, self.game.height, self.rng)
         self._stop()
+        self.game = Game(self.game.width, self.game.height, self.rng)
         self._play()
+
+    def _ready(self, columns: int, rows: int) -> None:
+        """A new board, on the splash screen until a key starts it."""
+        self._stop()
+        self.game = Game(columns, rows, self.rng)
+        self.state = READY
+        self._redraw()
 
     def _play(self) -> None:
         self.state = PLAYING
@@ -168,7 +170,7 @@ class SnakeView(Horizontal, can_focus=True):
             self._schedule()
         self._redraw()
 
-    def _show_score(self) -> None:
+    def _show_side(self) -> None:
         state = self.query_one("#snake-state", Static)
         won = self.state == OVER and self.game.won
         state.update("You win!" if won else STATES[self.state])
@@ -186,18 +188,17 @@ class SnakeView(Horizontal, can_focus=True):
         self.query_one("#snake-prompt").visible = self.state != PLAYING
 
     def _redraw(self) -> None:
-        self._show_score()
-        self.query_one(SnakeBoard).refresh()
+        self._show_side()
+        self.query_one(SnakeBoard).show(self.game, self.state == READY)
 
 
 class SnakeBoard(Widget):
-    """The board: a cell is two characters wide and one tall, so it comes out square; the words for
-    the state on top, in the middle.
+    """The board: a cell is two characters wide and one tall, so it comes out square. Before a game,
+    the splash screen.
 
     The wall is a character thick at the sides and half of one on top and under, the half on the
     board's side, not a border: a border's line runs through the middle of its characters, so a
-    snake touching it seemed not to. Where the snake crashed,
-    into the wall or itself, is red.
+    snake touching it seemed not to. Where the snake crashed, into the wall or itself, is red.
 
     The colors come from TCSS through the component classes, so a theme change repaints them.
     """
@@ -219,88 +220,102 @@ class SnakeBoard(Widget):
             self.columns = columns
             self.rows = rows
 
-    def __init__(self) -> None:
+    def __init__(self, game: Game) -> None:
         super().__init__(id="snake-board")
         self.cells = (0, 0)
+        self.game = game
+        self.splash = True
 
-    def on_resize(self, event: Resize) -> None:
+    def on_resize(self) -> None:
         # Inside the wall, a character thick all round; a cell is two characters wide
         cells = ((self.content_size.width - 2) // CELL, self.content_size.height - 2)
         if cells != self.cells:
             self.cells = cells
             self.post_message(self.Resized(*cells))
 
-    def _style(self, name: str) -> Style:
-        return self.get_component_rich_style(f"snake--{name}")
+    def show(self, game: Game, splash: bool) -> None:
+        """Draw game, or the splash screen on its empty board."""
+        self.game = game
+        self.splash = splash
+        self.refresh()
 
-    def _splash(self, game: Game, put, fill, right: int, bottom: int) -> None:
+    def render(self) -> Text:
+        game = self.game
+        canvas = Canvas(self.content_size.width, self.content_size.height, game, self.get_component_rich_style)
+        for x in range(canvas.right + 1):
+            canvas.put(x, 0, "▄", "wall")
+            canvas.put(x, canvas.bottom, "▀", "wall")
+        for y in range(game.height):
+            canvas.fill((-1, y), "wall")
+            canvas.fill((game.width, y), "wall")
+        # Nothing but the splash screen before a game, and nothing on the board once one has started
+        if self.splash:
+            self._splash(canvas)
+            return canvas.text()
+        for cell in game.snake:
+            canvas.fill(cell, "body")
+        if game.snake:
+            canvas.fill(game.head, "head")
+        if game.food is not None:
+            canvas.fill(game.food, "food")
+        if game.crash is not None:
+            canvas.fill(game.crash, "crash")
+        return canvas.text()
+
+    def _splash(self, canvas: "Canvas") -> None:
         """The S-shaped snake, the title and the food, or the title alone on a board too small."""
+        game = canvas.game
         columns, rows = SPLASH_SIZE
         if game.width < columns or game.height < rows:
-            row, start = bottom // 2, max(1, (1 + right - len(TITLE)) // 2)
-            for index, char in enumerate(TITLE[: right - start]):
-                put(start + index, row, char, "title")
+            row, start = canvas.bottom // 2, max(1, (1 + canvas.right - len(TITLE)) // 2)
+            for index, char in enumerate(TITLE[: canvas.right - start]):
+                canvas.put(start + index, row, char, "title")
             return
         # In the middle, its tail stretched back to the left wall, like a snake coming in
         left, top = (game.width - columns) // 2, (game.height - rows) // 2
         tail = SPLASH_SNAKE[0]
         for x in range(-left, tail[0]):
-            fill((left + x, top + tail[1]), "body")
+            canvas.fill((left + x, top + tail[1]), "body")
         for x, y in SPLASH_SNAKE[:-1]:
-            fill((left + x, top + y), "body")
+            canvas.fill((left + x, top + y), "body")
         head = SPLASH_SNAKE[-1]
-        fill((left + head[0], top + head[1]), "head")
-        fill((left + SPLASH_FOOD[0], top + SPLASH_FOOD[1]), "food")
+        canvas.fill((left + head[0], top + head[1]), "head")
+        canvas.fill((left + SPLASH_FOOD[0], top + SPLASH_FOOD[1]), "food")
         x, y = SPLASH_TITLE
         for index, char in enumerate(TITLE):
-            put(CELL * (left + x) + 1 + index, top + y + 1, char, "title")
+            canvas.put(CELL * (left + x) + 1 + index, top + y + 1, char, "title")
 
-    def render(self) -> Text:
-        view = self.parent
-        if not isinstance(view, SnakeView):
-            return Text()
-        game = view.game
-        width, height = self.content_size.width, self.content_size.height
-        # A character per column and row, as (character, style)
-        grid: list[list[tuple[str, Style]]] = [[(" ", Style())] * width for _ in range(height)]
 
-        def put(x: int, y: int, char: str, name: str) -> None:
-            if 0 <= y < height and 0 <= x < width:
-                grid[y][x] = (char, self._style(name))
+class Canvas:
+    """The board's characters, each with the name of its style, drawn one at a time or a board cell
+    at a time. The board starts a character in, after the wall."""
 
-        right, bottom = CELL * game.width + 1, game.height + 1
+    def __init__(self, width: int, height: int, game: Game, style: Callable[[str], Style]) -> None:
+        self.width, self.height = width, height
+        self.game = game
+        # The component class's style, by name
+        self.style = style
+        self.chars = [[(" ", "")] * width for _ in range(height)]
+        # The wall's column on the right and its row at the bottom; the left and top ones are 0
+        self.right, self.bottom = CELL * game.width + 1, game.height + 1
 
-        def fill(cell: tuple[int, int], name: str) -> None:
-            # The board starts a character in, after the wall; a cell in a side wall is its one
-            # character, and in the top or bottom wall its half block
-            x, y = cell
-            columns = [0] if x < 0 else [right] if x >= game.width else [CELL * x + 1 + i for i in range(CELL)]
-            char = "▄" if y < 0 else "▀" if y >= game.height else "█"
-            for column in columns:
-                put(column, y + 1, char, name)
+    def put(self, x: int, y: int, char: str, name: str) -> None:
+        if 0 <= y < self.height and 0 <= x < self.width:
+            self.chars[y][x] = (char, name)
 
-        for x in range(right + 1):
-            put(x, 0, "▄", "wall")
-            put(x, bottom, "▀", "wall")
-        for y in range(game.height):
-            fill((-1, y), "wall")
-            fill((game.width, y), "wall")
-        if view.state != READY:
-            for cell in game.snake:
-                fill(cell, "body")
-            if game.snake:
-                fill(game.head, "head")
-            if game.food is not None:
-                fill(game.food, "food")
-        if game.crash is not None:
-            fill(game.crash, "crash")
-        # The splash screen on the empty board before the first game; nothing once one has started
-        if view.state == READY:
-            self._splash(game, put, fill, right, bottom)
+    def fill(self, cell: Cell, name: str) -> None:
+        # A cell in a side wall is its one character, and in the top or bottom wall its half block
+        x, y = cell
+        columns = [0] if x < 0 else [self.right] if x >= self.game.width else [CELL * x + 1 + i for i in range(CELL)]
+        char = "▄" if y < 0 else "▀" if y >= self.game.height else "█"
+        for column in columns:
+            self.put(column, y + 1, char, name)
+
+    def text(self) -> Text:
         text = Text(no_wrap=True, overflow="crop")
-        for row, chars in enumerate(grid):
+        for row, chars in enumerate(self.chars):
             if row:
                 text.append("\n")
-            for char, style in chars:
-                text.append(char, style)
+            for char, name in chars:
+                text.append(char, self.style(f"snake--{name}") if name else Style())
         return text

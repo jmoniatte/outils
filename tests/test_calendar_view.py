@@ -2,28 +2,11 @@ import asyncio
 import unittest
 from datetime import date
 
-from textual.app import App, ComposeResult
-
-from outils.app import load_stylesheet
 from outils.config import Config
 from outils.widgets import CalendarView, MonthView
-from tui_kit.theme import load_palette
+from tests.host import Host
 
 TODAY = date(2026, 9, 24)
-
-
-class Host(App):
-    CSS = load_stylesheet()
-
-    def __init__(self, view: CalendarView) -> None:
-        super().__init__()
-        self.view = view
-
-    def get_css_variables(self) -> dict[str, str]:
-        return {**super().get_css_variables(), **load_palette("onedark")}
-
-    def compose(self) -> ComposeResult:
-        yield self.view
 
 
 def lines(month: MonthView) -> list[str]:
@@ -35,10 +18,6 @@ def spans(month: MonthView, name: str) -> list[str]:
     text = month.render()
     style = month.get_component_rich_style(f"month--{name}")
     return [text.plain[span.start:span.end] for span in text.spans if span.style == style]
-
-
-def today_spans(month: MonthView) -> list[str]:
-    return spans(month, "today")
 
 
 def title_kind(month: MonthView) -> str:
@@ -53,10 +32,10 @@ def past_days(month: MonthView) -> list[int]:
 
 
 class CalendarViewTest(unittest.TestCase):
-    def run_view(self, view, body):
+    def run_view(self, body, config=Config(), **months):
         async def main():
-            app = Host(view)
-            async with app.run_test(size=(80, 14)) as pilot:
+            app = Host(CalendarView(config, today=TODAY, **months))
+            async with app.run_test(size=(90, 16)) as pilot:
                 await pilot.pause()
                 await body(app, pilot)
 
@@ -82,7 +61,7 @@ class CalendarViewTest(unittest.TestCase):
                 ],
             )
             # Today is a whole cell, the space either side of the number included
-            self.assertEqual([today_spans(m) for m in months], [[" 24 "], []])
+            self.assertEqual([spans(m, "today") for m in months], [[" 24 "], []])
             # Today's month has its name stand out, a month wholly past is grey
             self.assertEqual([title_kind(m) for m in months], ["title-current", "title"])
             # Days before today are grey, today and what follows are not; weekend or not makes no difference
@@ -96,7 +75,7 @@ class CalendarViewTest(unittest.TestCase):
             self.assertLessEqual(months[1].region.right - months[0].region.x, 58)
             self.assertEqual(app.view.footnote, "Thursday, September 24, 2026")
 
-        self.run_view(CalendarView(Config(), today=TODAY), body)
+        self.run_view(body)
 
     def test_shift_moves_every_month_and_today_only_shows_in_its_own(self):
         async def body(app, pilot):
@@ -105,7 +84,7 @@ class CalendarViewTest(unittest.TestCase):
             await pilot.pause()
             months = list(app.query(MonthView))
             self.assertEqual([(m.year, m.month) for m in months], [(2026, 10), (2026, 11)])
-            self.assertEqual([today_spans(m) for m in months], [[], []])
+            self.assertEqual([spans(m, "today") for m in months], [[], []])
             # The name that stands out follows today's month, not the one in focus
             self.assertEqual([title_kind(m) for m in months], ["title", "title"])
             view.action_shift(-10)
@@ -113,7 +92,7 @@ class CalendarViewTest(unittest.TestCase):
             self.assertEqual(view.months(), [(2025, 12), (2026, 1)])
             self.assertEqual(lines(months[1])[0], "        January 2026")
 
-        self.run_view(CalendarView(Config(), today=TODAY), body)
+        self.run_view(body)
 
     def test_the_week_start_and_the_number_of_months_come_from_the_caller(self):
         async def body(app, pilot):
@@ -122,18 +101,7 @@ class CalendarViewTest(unittest.TestCase):
             self.assertEqual((months[2].year, months[2].month), (2026, 9))
             self.assertEqual(lines(months[2])[2], " Su  Mo  Tu  We  Th  Fr  Sa ")
 
-        self.run_view(CalendarView(Config(week_start=6), today=TODAY, before=2, after=2), body)
-
-
-class NavigationTest(unittest.TestCase):
-    def run_view(self, body):
-        async def main():
-            app = Host(CalendarView(Config(), today=TODAY))
-            async with app.run_test(size=(90, 16)) as pilot:
-                await pilot.pause()
-                await body(app, pilot)
-
-        asyncio.run(main())
+        self.run_view(body, Config(week_start=6), before=2, after=2)
 
     def test_previous_today_and_next_buttons_move_the_months(self):
         async def body(app, pilot):
@@ -160,7 +128,7 @@ class NavigationTest(unittest.TestCase):
             await pilot.pause()
             self.assertEqual((view.year, view.month), (2026, 9))
             self.assertFalse(today.visible)
-            self.assertEqual([today_spans(m) for m in app.query(MonthView)], [[" 24 "], []])
+            self.assertEqual([spans(m, "today") for m in app.query(MonthView)], [[" 24 "], []])
 
         self.run_view(body)
 

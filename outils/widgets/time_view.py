@@ -1,19 +1,15 @@
 from datetime import UTC, datetime
 
-from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.widget import Widget
-from textual.widgets import Button, Input, Rule, Static
+from textual.containers import Vertical
+from textual.widgets import Button, Input, Rule
 
+from ..click_only import quick_button
 from ..config import Config
-from ..epoch import EpochError, parse, rows, seconds
+from ..epoch import LABELS, EpochError, parse, rows, seconds
 from .clocks_view import ClocksView
-from .lookup_box import LookupBox
-
-# The longest label and two spaces; the Epoch label is as wide in the TCSS, to line up the box
-LABEL = len("Relative") + 2
+from .lookup_box import LookupBox, LookupDetails, lookup_row
 
 
 class TimeView(Vertical):
@@ -28,18 +24,16 @@ class TimeView(Vertical):
         self.following = True
         # What the box was last given, to tell when it was edited
         self.shown = ""
+        # What the box names, None when it names nothing
+        self.moment: datetime | None = None
 
     def compose(self) -> ComposeResult:
         yield ClocksView(self.clocks)
         yield Rule(id="time-rule")
-        with Horizontal(classes="lookup-row", id="epoch-row"):
-            yield Static("Epoch", classes="lookup-label")
-            yield LookupBox(placeholder="Timestamp or date", id="epoch-input")
-            now = Button("Now", id="btn-now")
-            now.can_focus = False  # A click must not pull focus, as on the calendar's buttons
-            now.active_effect_duration = 0
-            yield now
-        yield EpochDetails()
+        details = LookupDetails(LABELS, id="epoch-details")
+        box = LookupBox(placeholder="Timestamp or date", id="epoch-input")
+        yield lookup_row("Epoch", box, quick_button("Now", "btn-now"), label_width=details.label_width)
+        yield details
 
     def on_mount(self) -> None:
         # One timer for both, so how far from now is never drawn before now moves on
@@ -49,14 +43,14 @@ class TimeView(Vertical):
         self.follow_now()
 
     def tick(self) -> None:
-        if not self.follow_now():
-            self.query_one(EpochDetails).move_to(datetime.now(UTC))
+        if not self.follow_now() and self.moment:
+            self.measure(datetime.now(UTC))
 
     def follow_now(self) -> bool:
         """Show now, unless the box is in use; say whether it did."""
         # Held while the box is being typed in, or holds an edit not yet converted
         box = self.query_one(LookupBox)
-        live = self.following and not box.has_focus and box.value in ("", self.shown)
+        live = self.following and self.screen.focused is not box and box.value in ("", self.shown)
         if live:
             self.convert("")
         # Nothing to go back to while it follows now; hidden, not removed, so it keeps its place
@@ -77,61 +71,23 @@ class TimeView(Vertical):
         # An empty box goes back to following now
         self.following = not event.value.strip()
         self.convert(event.value)
-        self.screen.set_focus(None)
         self.follow_now()
 
     def convert(self, text: str) -> None:
         """Show what text names, or why it names nothing; an empty text is now."""
-        details = self.query_one(EpochDetails)
         # Whole seconds: now needs no fraction
         now = datetime.now(UTC).replace(microsecond=0)
         try:
-            moment = parse(text, now)
+            self.moment = parse(text, now)
         except EpochError as error:
-            details.show(None, now, str(error))
+            self.moment = None
+            self.query_one(LookupDetails).show([], str(error))
             return
         # Like the IP tab: what was converted, in blue, the seconds for now
-        self.shown = text.strip() or seconds(moment)
+        self.shown = text.strip() or seconds(self.moment)
         self.query_one(LookupBox).show_found(self.shown)
-        details.show(moment, now)
+        self.measure(now)
 
-
-class EpochDetails(Widget):
-    """What the box names, a row each: the timestamp, the date in UTC and here, and how far from now.
-
-    How far from now is measured from the time TimeView gives it every second, not the clock at
-    each redraw, so it cannot say "1 second ago" for now until now moves on.
-    The colors come from TCSS through the component classes, so a theme change repaints them.
-    """
-
-    COMPONENT_CLASSES = {"epoch--label", "epoch--error"}
-
-    def __init__(self) -> None:
-        super().__init__(id="epoch-details")
-        self.moment: datetime | None = None
-        self.at = datetime.now(UTC)
-        self.error = ""
-
-    def show(self, moment: datetime | None, at: datetime, error: str = "") -> None:
-        self.moment = moment
-        self.at = at
-        self.error = error
-        self.refresh(layout=True)
-
-    def move_to(self, at: datetime) -> None:
-        """Measure how far from now from at."""
-        self.at = at
-        self.refresh()
-
-    def render(self) -> Text:
-        if self.error:
-            return Text(self.error, style=self.get_component_rich_style("epoch--error"))
-        if self.moment is None:
-            return Text()
-        text = Text()
-        for index, (label, value) in enumerate(rows(self.moment, self.at)):
-            if index:
-                text.append("\n")
-            text.append(f"{label:<{LABEL}}", style=self.get_component_rich_style("epoch--label"))
-            text.append(value)
-        return text
+    def measure(self, now: datetime) -> None:
+        """Show the moment a row each, how far from now measured from now."""
+        self.query_one(LookupDetails).show(rows(self.moment, now))
