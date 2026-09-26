@@ -102,7 +102,7 @@ class SnakeView(Horizontal, can_focus=True):
         # A character of wall either side
         self.query_one(SnakeBoard).styles.width = CELL * columns + 2
 
-    def on_hide(self) -> None:
+    def tab_hidden(self) -> None:
         if self.state == PLAYING:
             self._pause()
 

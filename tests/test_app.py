@@ -15,7 +15,8 @@ from outils.ipinfo import IpInfoError
 from outils.nmcli import Scan
 from outils.pactl import SINK, Device, Mixer
 from outils.weather import WeatherError
-from outils.widgets import CalendarView, WeatherView
+from outils.widgets import CalendarView, LifeView, SnakeView, WeatherView
+from outils.widgets.snake_view import PAUSED, PLAYING
 
 
 SPEAKERS = Device(SINK, 1, "laptop", "Laptop speakers", 80, False, default=True)
@@ -46,7 +47,7 @@ class AppTest(unittest.TestCase):
                 patch("outils.widgets.weather_view.forecast", side_effect=WeatherError("offline")) as self.forecast,
                 patch("outils.widgets.ip_view.fetch", side_effect=IpInfoError("offline")) as self.fetch,
                 # Nor the Dropbox client on this computer
-                patch("outils.widgets.dropbox_view.status", return_value="Up to date"),
+                patch("outils.widgets.dropbox_view.status", return_value="Up to date") as self.status,
                 patch("outils.widgets.dropbox_view.recent", return_value=[]),
                 # Nor pactl and bluetoothctl: one output in use, no headphones
                 patch("outils.pactl.mixer", return_value=Mixer(outputs=[SPEAKERS])) as self.mixer,
@@ -108,6 +109,48 @@ class AppTest(unittest.TestCase):
             self.assertEqual(app.mode, "time")
 
         self.run_app(body)
+
+    def test_each_view_is_told_when_its_tab_shows_and_hides(self):
+        async def show(app, pilot, mode):
+            app.show_mode(mode)
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+
+        async def body(app, pilot):
+            # Once, though the first tab is shown twice on mount
+            await app.workers.wait_for_complete()
+            self.assertEqual(self.forecast.call_count, 1)
+            # No forecast came, so each return asks again, whatever tab it comes back from
+            for mode in ("sound", "life", "snake", "dropbox"):
+                await show(app, pilot, mode)
+                await show(app, pilot, "weather")
+            self.assertEqual(self.forecast.call_count, 5)
+            # Dropbox asks the client when its tab shows, then every POLL seconds, and never while hidden
+            calls = self.status.call_count
+            await pilot.pause(2.5)
+            self.assertEqual(self.status.call_count, calls)
+            await show(app, pilot, "dropbox")
+            self.assertEqual(self.status.call_count, calls + 1)
+            # Life runs only while its tab shows
+            life = app.query_one(LifeView)
+            await show(app, pilot, "life")
+            await show(app, pilot, "sound")
+            cells = life.cells
+            await pilot.pause(0.5)
+            self.assertIs(life.cells, cells)
+            await show(app, pilot, "life")
+            await pilot.pause(0.5)
+            self.assertIsNot(life.cells, cells)
+            # Snake pauses when its tab hides
+            snake = app.query_one(SnakeView)
+            await show(app, pilot, "snake")
+            await pilot.press("space")
+            self.assertEqual(snake.state, PLAYING)
+            await show(app, pilot, "weather")
+            self.assertEqual(snake.state, PAUSED)
+
+        self.run_app(body, "weather")
 
     def test_weather_and_ip_credit_their_service_over_the_rule_with_a_link(self):
         async def body(app, pilot):

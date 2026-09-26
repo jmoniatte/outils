@@ -31,7 +31,7 @@ class IpView(Vertical):
         yield lookup_row("IP", box, label_width=details.label_width)
         yield details
 
-    def on_show(self) -> None:
+    def tab_shown(self) -> None:
         # Asked the first time its tab shows, so opening another tab costs no request
         if not self.asked:
             self.asked = True

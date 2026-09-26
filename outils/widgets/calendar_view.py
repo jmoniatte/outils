@@ -55,9 +55,12 @@ class CalendarView(Vertical, can_focus=True):
     def on_mount(self) -> None:
         self._update_today_button()
         # outils stays open for days, so a new day must reach the calendar without a restart
-        self.set_interval(60, self.tab_shown)
+        self.set_interval(60, self.check_today)
 
     def tab_shown(self) -> None:
+        self.check_today()
+
+    def check_today(self) -> None:
         self.set_today(date.today())
 
     def set_today(self, today: date) -> None:

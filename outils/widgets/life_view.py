@@ -42,10 +42,10 @@ class LifeView(Widget, can_focus=True):
     def on_mount(self) -> None:
         self.timer = self.set_interval(1 / SPEED, self.advance, pause=True)
 
-    def on_show(self) -> None:
+    def tab_shown(self) -> None:
         self.timer.resume()
 
-    def on_hide(self) -> None:
+    def tab_hidden(self) -> None:
         self.timer.pause()
 
     def on_resize(self) -> None:

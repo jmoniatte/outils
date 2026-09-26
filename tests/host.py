@@ -12,7 +12,7 @@ MODE_VIEWS = {view for _, view in MODES.values()}
 
 class Host(App):
     """view in outils's styles and onedark's colors, as when its tab shows: padded if it is a tab's
-    view, focused if it can take focus. The messages it would show are kept in messages."""
+    view, focused if it can take focus, and told its tab shows. The messages it would show are kept in messages."""
 
     CSS = load_stylesheet()
     AUTO_FOCUS = None
@@ -31,6 +31,8 @@ class Host(App):
     def on_mount(self) -> None:
         if self.view.can_focus:
             self.view.focus()
+        if hasattr(self.view, "tab_shown"):
+            self.view.tab_shown()
 
     def notify(self, message, **kwargs) -> None:
         self.messages.append(message)

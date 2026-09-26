@@ -36,9 +36,12 @@ class CalendarViewTest(unittest.TestCase):
     def run_view(self, body, config=Config(), **months):
         async def main():
             app = Host(CalendarView(config, today=TODAY, **months))
-            async with app.run_test(size=(90, 16)) as pilot:
-                await pilot.pause()
-                await body(app, pilot)
+            # Its tab showing reads the date
+            with patch("outils.widgets.calendar_view.date") as clock:
+                clock.today.return_value = TODAY
+                async with app.run_test(size=(90, 16)) as pilot:
+                    await pilot.pause()
+                    await body(app, pilot)
 
         asyncio.run(main())
 

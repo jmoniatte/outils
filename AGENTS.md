@@ -95,6 +95,7 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     bluetooth.py        # Paired Bluetooth headphones through bluetoothctl, merged into pactl's outputs; no Textual
     status_bar.py       # Signals i3blocks after a sound change so its volume block redraws
     nmcli.py            # Every nmcli call and the parsing of its terse output; no Textual
+    wifi_operations.py  # What the Wi-Fi tab has running in nmcli: one connection change at a time, scans that never overlap; no Textual
     qr.py               # A Wi-Fi network's QR code, drawn in half blocks (segno); no Textual
     screens/            # Help, and the Wi-Fi tab's panels: details and share (tui-kit PanelScreens), the password, and the QR code alone
     widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py,
@@ -114,12 +115,13 @@ The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus
 can take it (the calendar, for its arrows, Dropbox, for its list, Life, for `r`, and Snake, for its keys) and clears it otherwise,
 so a hidden view never keeps it. A view must not focus itself while hidden: `TabbedContent`
 switches to the tab of whatever has focus. `_show_mode` also calls `tab_shown` on a view that
-has it, and `tab_hidden` on the one before (`OutilsApp.shown_view`): Sound and Wi-Fi use those,
-not `on_show` and `on_hide`, because Textual's partial relayout does not always send Show to a
-pane that comes back (Sound got none once Wi-Fi sat next to it). `tab_shown` is where they give
-focus to one of their own widgets. `_show_mode` runs twice for the first tab (on mount, then on
-`TabActivated`), so it does all this only when the view changes.
-Weather and IP ask their service the first time their tab shows (`on_show`), so opening the
+has it, and `tab_hidden` on the one before (`OutilsApp.shown_view`). Every view that acts when
+its tab shows or hides uses those, never `on_show` and `on_hide`, because Textual's partial
+relayout does not always send Show to a pane that comes back (Sound got none once Wi-Fi sat next
+to it). Sound and Wi-Fi give focus to one of their own widgets there. `_show_mode` runs twice for
+the first tab (on mount, then on `TabActivated`), so it does all this only when the view changes.
+A view test's `Host` calls `tab_shown` once mounted, as the app does.
+Weather and IP ask their service the first time their tab shows (`tab_shown`), so opening the
 calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
 would break.
 
@@ -154,8 +156,8 @@ mode is a view in `widgets/` and an entry in `MODES`;
 
 `CalendarView` puts `before` + 1 + `after` `MonthView`s side by side (0 and 1 by default), the
 month in focus first, under the Previous, Today and Next buttons; it starts on today's
-month. outils stays open for days, so `CalendarView.set_today` reads the date again every minute and
-when its tab shows (`tab_shown`): today's highlight moves, and a calendar on today's old month follows
+month. outils stays open for days, so `CalendarView.set_today` reads the date again every minute
+(`check_today`) and when its tab shows (`tab_shown`, which calls it): today's highlight moves, and a calendar on today's old month follows
 to the new one, while a month picked by hand stays. Tests pass `today=` and call `set_today`. `CalendarView.action_shift(delta)` moves them all (Previous, Next, `←` and `→`), and
 `show_month` puts any month in focus (Today, which is hidden while today's month is
 on show, first or not; hidden with `visible`, so it keeps its place). The buttons cannot take focus, so the calendar keeps it and its keys work after
@@ -193,7 +195,7 @@ box's label as wide as the details' labels, so the box lines up with the values.
 in red in place of the rows.
 
 Under the clocks and a rule (`#time-rule`), an Epoch box converts what Enter finds there. It
-opens on now, in seconds, and follows it every second (`follow_now`) until it is used: never
+opens on now, in seconds, and follows it every second and when its tab shows (`follow_now`, from `tab_shown` too) until it is used: never
 while the box has focus or holds an edit, and not once something typed was converted. The green
 Now button beside the box, shown only while the box is not following now (hidden with
 `visible`, so it keeps its place), goes back to following it, as does Enter on an empty box. Now
@@ -235,9 +237,8 @@ the pop-up costs one request. `units` is `metric` (the default) or `imperial`, p
 Open-Meteo, which converts. °C and °F, right of the City box (`#weather-units`, buttons that
 cannot take focus), switch them, the one in use in bold blue: the place on show is asked again
 in the other units (`WeatherView.location`), and `WeatherView.UnitsChanged` has the app write
-`units:` to `config.yaml` (`config.save_units`, which replaces only the value, found through PyYAML's node positions, checks
-the file reads back the same but for it, and writes it aside then moves it over, through a link to
-the file it points at; a file it cannot change safely is left as it was, with a warning in the footer).
+`units:` to `config.yaml` (`config.save_units`, through tui-kit's `save_setting`, as the theme is saved; a file it cannot
+change safely is left as it was, with a warning in the footer).
 
 `ForecastView` shows the weather now (icon, temperature, words, then feels like,
 wind, humidity and rain), then one row per day for `weather.DAYS` days, today first and the
@@ -273,7 +274,8 @@ what synced, so the files are the `RECENT` (200) with the latest modified times 
 `.dropbox.cache`. A downloaded file keeps the time it was changed elsewhere, not when it synced.
 
 Over the list, "Last 200 synced files" (`#dropbox-title`) on the left, and on the right a button that names what it acts on: Stop Dropbox (red) while the client
-runs, Start Dropbox (green) while it is stopped, as `dropbox status` tells. Its tooltip says what it
+runs, Start Dropbox (green) while it is stopped, as `dropbox status` last told (`DropboxView.state`,
+which picks both the button's action and its look). Its tooltip says what it
 does: stop quits the whole app, it does not pause, so nothing syncs until it starts again. It runs
 `dropbox stop` or `dropbox start` in a worker; meanwhile "Starting..." (green) or "Stopping..."
 (red) takes the button's place (`#dropbox-state`, hidden otherwise). A failure goes to the
@@ -287,7 +289,7 @@ stopped client is no failure (`dropbox status` says "Dropbox isn't running!" and
 status that times out or fails shows as running. `start` and `stop` are coroutines that check every
 `CHECK` seconds, not blocking calls in a thread: Python waits for its threads before it exits, so
 quitting during "Stopping..." would wait for the daemon. With no `dropbox` command, a red line says so in place of the button.
-The view asks every `POLL` seconds, only while its tab shows (`on_show` and `on_hide`), one look
+The view asks every `POLL` seconds, only while its tab shows (`tab_shown` and `tab_hidden`), one look
 at a time (`reload.Reload`): walking a big folder can take longer than `POLL`, and a cancelled
 look would leave its thread running and throw its result away, so a tick skips while one runs,
 and the look after a start or stop runs once it ends; a look overtaken that way is not shown (`Reload.overtaken`).
@@ -337,7 +339,9 @@ from `screen_x`, not `event.x`.
 
 `SoundView.show` updates the cards in place when the same devices are listed, so a reload
 every 2 seconds does not steal focus or flicker; when the list changes, it remounts that
-section's cards and puts focus back on the same device.
+section's cards and puts focus back on the same device. A card's id comes from `Device.key`, the
+kind and the Bluetooth address for headphones, connected or not, else the kind and pactl's name,
+never pactl's index, which is only for pactl's commands.
 
 `pactl.mixer` reads `pactl --format=json` for `info` (the default sink and source), `sinks` and
 `sources`. `parse_devices` drops a device whose active port reports `not available` (the video
@@ -354,8 +358,9 @@ recording a monitor stays. A device's volume is the mean of its channels; settin
 channel, so balance is lost.
 
 Volume keys and mute redraw the row at once through `SoundView.redraw`, then run pactl in the
-`_change` worker, then `status_bar.refresh`. `SoundView._pactl_lock` runs pactl calls one at a
-time, so a held key lands in order. Every change and a timer every `REFRESH_SECONDS` reload
+`_change` worker, then `status_bar.refresh`. Every pactl call the view makes, reads included,
+goes through `SoundView._pactl`, which holds `_pactl_lock`, so they run one at a time and a held
+key lands in order; bluetoothctl calls stay outside it. Every change and a timer every `REFRESH_SECONDS` reload
 everything, the timer only while the tab shows (`tab_shown` and `tab_hidden`). One reload runs at a time
 (`reload.Reload`): a tick while one runs is skipped, and a change's reload runs after it, the one
 it overtook not shown (`Reload.overtaken`), so the change never flickers back and the latest state shows and a slow pactl or bluetoothctl never has its result thrown away; a pactl failure while
@@ -384,7 +389,7 @@ failures on stdout, sometimes with exit status 0, so `bluetooth.run` looks for `
 `bluetooth.merge` joins them to the outputs by address (`Device.mac`, read by
 `pactl.bluetooth_address` from `api.bluez5.address` or the sink name). A connected headset gets
 its battery on its card. A headset with no sink (not connected, or just connected) gets a card of
-its own with a negative index: `Device.playable` is then False, so the volume keys, mute and
+its own with no pactl index (`None`): `Device.playable` is then False, so the volume keys, mute and
 the bar do nothing on it. Clicking its row, or Enter, connects it and then, once its sink shows
 up (`SoundView._wait_for_sink`), switches to it. The card's Connect / Disconnect button (`c`) connects
 or disconnects. One connect or disconnect runs at a time (`SoundView.bluetooth_busy`), and its
@@ -426,14 +431,22 @@ The first time the tab shows, and on `r`, it shows NetworkManager's cached list 
 runs `--rescan yes`, which takes around 10 seconds; later shows only read the cached list. `nmcli.run` goes through `command.run` (tui-kit's `processes.run`), and Python waits for
 worker threads before it exits, so tui-kit's `BaseApp` kills the nmcli processes still running
 when the app unmounts; otherwise quitting during a rescan hangs until it ends. A timer refreshes the cached list every `REFRESH_SECONDS` while the tab shows (`tab_shown` and
-`tab_hidden`), and skips while a scan or a connect is running so it never cancels one. An nmcli failure while loading is shown in the footer once, as on the Sound tab.
+`tab_hidden`). An nmcli failure while loading is shown in the footer once, as on the Sound tab.
+
+`wifi_operations.Operations` owns what runs in nmcli, and the view only asks it; nothing is
+cancelled, since nmcli cannot be stopped midway and its thread would carry on. A connection change
+(connect, disconnect, forget, `w`) runs one at a time: `Operations.change` says what runs
+("connecting to Cafe") from the request until the nmcli call really ends, even if whatever awaits it
+is cancelled, and any other change asked meanwhile is refused with "Still connecting to Cafe" (or
+"Still disconnecting", ...) and shown in the footer status. Scans go through a `Reload`: a timer
+tick is skipped while a scan or a change runs, any other request runs the scan once more after
+the one running, and `r` during a rescan does not ask for another rescan.
 
 Joining (`WifiView._connect_requested`): the network in use opens its details; saved and open ones
 connect at once; 802.1X ones are refused with a hint; the rest open `PasswordScreen`, which only
 collects the password. Every connect runs in `WifiView._connect`, which reports to the dialog while
-it is open, so it stays open on an error. `WifiView.connecting` holds the SSID being joined until
-nmcli returns, even after Cancel, since nmcli cannot be stopped midway; another connect,
-disconnect and forget wait for it. The password reaches nmcli on stdin through `--ask`, never in
+it is open, so it stays open on an error; Cancel closes it, and the connect still holds until
+nmcli returns. The password reaches nmcli on stdin through `--ask`, never in
 argv. When a new connect fails, `nmcli.connect` deletes the profiles it made, not one saved before.
 
 `i` (or Enter on the network in use) opens `DetailsScreen` with `nmcli.details()`: `device show`
@@ -452,8 +465,8 @@ is done from Nearby.
 of modules per line. It is drawn in fixed black on white, since a phone camera needs that whatever
 the theme. The password is only read when asked for.
 
-The footer status is built by `WifiView._show_status` from `connecting`, `wifi_on`,
-`connectivity` and `scanning`, most urgent first. `connectivity` is `nmcli networking
+The footer status is built by `WifiView._show_status` from the change running, `wifi_on`,
+`connectivity` and whether a rescan runs, most urgent first. `connectivity` is `nmcli networking
 connectivity`, NetworkManager's cached check, read on every refresh. `portal` means a login page:
 `o` opens `LOGIN_PAGE_URL`, a plain http address that the login page intercepts. `w` flips the
 radio with `nmcli radio wifi on|off` and reloads again after `WIFI_ON_DELAY`, since the card
@@ -462,7 +475,7 @@ lists nothing for a few seconds after it comes on.
 ## Life
 
 `LifeView` fills its tab with a random grid (`life.DENSITY` of the cells alive) and runs
-`life.step` `SPEED` times a second, only while its tab shows (`on_show` and `on_hide` resume and
+`life.step` `SPEED` times a second, only while its tab shows (`tab_shown` and `tab_hidden` resume and
 pause its timer). Each character holds two cells, one over the other, drawn with half blocks
 (`▀`, `▄`, `█`), so the cells come out square: an area of 56 by 14 characters is a 56 by 28
 grid. The edges wrap around, so gliders come back on the other side. A grid that repeats one of
@@ -497,7 +510,7 @@ point, and a wall or its own body ends the game (the cell the tail leaves is fre
 board wins.
 
 The view has four states: `ready` (before any game; the keys are on Help), `playing`, `paused`
-and `over`. It starts `ready`, and pauses when its tab hides (`on_hide`). Arrows, hjkl or wasd
+and `over`. It starts `ready`, and pauses when its tab hides (`tab_hidden`). Arrows, hjkl or wasd
 steer (and start or resume the game), p or space plays or pauses (and, once
 over, goes back to `ready` on a new board, so a second press starts it), r starts a new game at
 once. Each steer key is one `Binding` of three keys with a `key_display`, so Help

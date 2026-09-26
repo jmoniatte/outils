@@ -41,7 +41,8 @@ class Device:
     """
 
     kind: str
-    index: int
+    # pactl's number for the device, for its commands only; None for headphones with no sink
+    index: int | None
     name: str
     label: str
     volume: int
@@ -55,7 +56,12 @@ class Device:
     @property
     def playable(self) -> bool:
         """Whether there is a sink or source behind it to set the volume of and switch to."""
-        return self.index >= 0
+        return self.index is not None
+
+    @property
+    def key(self) -> str:
+        """Who it is across reloads: its Bluetooth address for headphones, connected or not, else pactl's name."""
+        return f"{self.kind}-{self.mac or self.name}"
 
 
 @dataclass(frozen=True, slots=True)

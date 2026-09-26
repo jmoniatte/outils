@@ -88,7 +88,7 @@ def merge(mixer: Mixer, found: list[Headset]) -> Mixer:
     """Add the battery to the outputs that are headsets, and a row for each headset with no sink.
 
     A headset has no sink while disconnected, and for a moment after it connects. Its row has
-    a negative index, which Device.playable reads as nothing to set the volume of.
+    no index, which Device.playable reads as nothing to set the volume of.
     """
     by_mac = {headset.mac: headset for headset in found}
 
@@ -100,8 +100,8 @@ def merge(mixer: Mixer, found: list[Headset]) -> Mixer:
     playing = {device.mac for device in outputs}
     missing = [headset for headset in found if headset.mac not in playing]
     outputs += [
-        Device(SINK, -1 - number, f"bluez:{headset.mac}", headset.name, 0, False,
+        Device(SINK, None, f"bluez:{headset.mac}", headset.name, 0, False,
                mac=headset.mac, connected=headset.connected, battery=headset.battery)
-        for number, headset in enumerate(missing)
+        for headset in missing
     ]
     return Mixer(outputs=outputs, inputs=[with_battery(device) for device in mixer.inputs])

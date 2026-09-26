@@ -259,6 +259,9 @@ class SoundTest(unittest.TestCase):
             # While it connects, the header says so
             connect, seen = mocks["connect"].side_effect, []
             mocks["connect"].side_effect = lambda mac: (seen.append(footer_message(app)), connect(mac))
+            # Every pactl call holds the view's lock, this switch included
+            locked = []
+            mocks["set_default"].side_effect = lambda device: locked.append(app.query_one(SoundView)._pactl_lock.locked())
 
             # Volume keys do nothing on a card with no sink behind it
             await pilot.press("down", "down", "right", "m")
@@ -269,6 +272,7 @@ class SoundTest(unittest.TestCase):
             mocks["set_mute"].assert_not_called()
             mocks["connect"].assert_called_once_with(SHOKZ_MAC)
             self.assertEqual(seen, ["Connecting to OpenRun by Shokz..."])
+            self.assertEqual(locked, [True])
             mocks["set_default"].assert_called_once_with(SHOKZ)
             self.assertEqual(footer_message(app), "Playing on OpenRun by Shokz")
             self.assertEqual(text(app, SHOKZ), ["OpenRun by Shokz", "60%", "Mute", "Disconnect"])
@@ -278,6 +282,22 @@ class SoundTest(unittest.TestCase):
             mocks["disconnect"].assert_called_once_with(SHOKZ_MAC)
 
         self.run_app(body, headsets=[Headset(SHOKZ_MAC, "OpenRun by Shokz", False)])
+
+    def test_focus_stays_on_headphones_when_other_headphones_connect(self):
+        speaker = Headset("00:11:22:33:44:55", "Speaker", False)
+
+        async def body(app, pilot, mocks):
+            await pilot.press("down", "down", "down")
+            self.assertEqual(app.focused.device.label, "Speaker")
+            with (
+                patch("outils.pactl.mixer", return_value=Mixer(outputs=[LAPTOP, MONITOR, SHOKZ], inputs=[MIC])),
+                patch("outils.bluetooth.headsets", return_value=[Headset(SHOKZ_MAC, "OpenRun by Shokz", True), speaker]),
+            ):
+                app.query_one(SoundView).load_mixer()
+                await settle(app, pilot)
+            self.assertEqual(app.focused.device.label, "Speaker")
+
+        self.run_app(body, headsets=[Headset(SHOKZ_MAC, "OpenRun by Shokz", False), speaker])
 
     def test_enter_uses_a_device_and_reports_errors(self):
         async def body(app, pilot, mocks):

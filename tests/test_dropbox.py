@@ -187,6 +187,8 @@ class DropboxViewTest(unittest.TestCase):
         async def body(app, pilot):
             label = app.query_one("#dropbox-state")
             toggle = app.query_one("#btn-dropbox-toggle")
+            # What the client last said picks the button's action and look
+            self.assertEqual(app.view.state, RUNNING)
             # While dropbox stop runs: "Stopping..." in red in place of the button
             release = asyncio.Event()
             self.stop.side_effect = release.wait
@@ -200,6 +202,7 @@ class DropboxViewTest(unittest.TestCase):
             release.set()
             await settle(app, pilot)
             self.stop.assert_called_once()
+            self.assertEqual(app.view.state, STOPPED)
             self.assertFalse(label.display)
             self.assertTrue(toggle.display)
             self.assertEqual(str(toggle.label), "Start Dropbox")

@@ -79,7 +79,7 @@ class WeatherView(Vertical):
             self.load(self.location)
         self.post_message(self.UnitsChanged(units))
 
-    def on_show(self) -> None:
+    def tab_shown(self) -> None:
         # Asked the first time its tab shows, so opening another tab costs no request, then again once old
         if time() - self.loaded_at > MAX_AGE:
             self.load(self.location or self.config.location)

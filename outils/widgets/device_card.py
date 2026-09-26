@@ -1,5 +1,7 @@
 """One device as a row: its name, its volume and its buttons, all on one line."""
 
+import re
+
 from rich.text import Text
 from textual import events, on
 from textual.app import ComposeResult
@@ -72,7 +74,8 @@ def battery_text(level: int) -> str:
 
 
 def card_id(device: Device) -> str:
-    return f"device-{device.kind}-{device.index}"
+    # A widget id takes only letters, digits, - and _: a MAC's colons and a name's dots become _
+    return "device-" + re.sub(r"[^A-Za-z0-9_-]", "_", device.key)
 
 
 class VolumeBar(Widget):

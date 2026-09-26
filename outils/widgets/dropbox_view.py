@@ -61,6 +61,8 @@ class DropboxView(Vertical, can_focus=True):
     def __init__(self, config: Config, root: Path | None = None) -> None:
         super().__init__(id="dropbox")
         self.root = root or folder()
+        # What dropbox status last said, None until it has; it picks the button's action and look
+        self.state: str | None = None
         # While dropbox start or stop runs
         self.busy = False
         self._reload = Reload(self._poll)
@@ -84,11 +86,11 @@ class DropboxView(Vertical, can_focus=True):
     def on_mount(self) -> None:
         self.timer = self.set_interval(POLL, partial(self.poll, tick=True), pause=True)
 
-    def on_show(self) -> None:
+    def tab_shown(self) -> None:
         self.poll()
         self.timer.resume()
 
-    def on_hide(self) -> None:
+    def tab_hidden(self) -> None:
         self.timer.pause()
 
     @work(group="poll")
@@ -104,19 +106,21 @@ class DropboxView(Vertical, can_focus=True):
         files = await asyncio.to_thread(recent, self.root)
         if self._reload.overtaken:
             return
-        self.show_state(current)
+        self.state = current
+        self.show_state()
         self.query_one(RecentFiles).show(files, f"No files in {self.root}")
 
-    def show_state(self, current: str) -> None:
+    def show_state(self) -> None:
         if self.busy:
             return
+        stopped = self.state == STOPPED
         toggle = self.query_one("#btn-dropbox-toggle", Button)
         toggle.visible = True
-        toggle.display = current != MISSING
-        toggle.label = "Start Dropbox" if current == STOPPED else "Stop Dropbox"
-        toggle.tooltip = START_TIP if current == STOPPED else STOP_TIP
-        toggle.set_class(current == STOPPED, "-start")
-        self._show_label("missing", "The dropbox command is not installed" if current == MISSING else "")
+        toggle.display = self.state != MISSING
+        toggle.label = "Start Dropbox" if stopped else "Stop Dropbox"
+        toggle.tooltip = START_TIP if stopped else STOP_TIP
+        toggle.set_class(stopped, "-start")
+        self._show_label("missing", "The dropbox command is not installed" if self.state == MISSING else "")
 
     def _show_label(self, name: str, text: str) -> None:
         """Say text in place of the button, or nothing when text is empty."""
@@ -132,7 +136,7 @@ class DropboxView(Vertical, can_focus=True):
         # Busy from the click on, so a second click before the worker runs starts no second one
         if not self.busy:
             self.busy = True
-            self.switch(event.button.has_class("-start"))
+            self.switch(self.state == STOPPED)
 
     @work(group="switch")
     async def switch(self, starting: bool) -> None:

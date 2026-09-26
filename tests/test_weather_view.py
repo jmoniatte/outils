@@ -109,15 +109,11 @@ class WeatherViewTest(unittest.TestCase):
     def test_a_forecast_older_than_max_age_is_asked_again_when_the_tab_shows(self):
         async def body(app, pilot, fetch):
             view = app.view
-            view.display = False
-            await pilot.pause()
-            view.display = True
+            view.tab_shown()
             await settle(app, pilot)
             self.assertEqual(fetch.call_count, 1)
-            view.display = False
-            await pilot.pause()
             with patch("outils.widgets.weather_view.time", return_value=time() + MAX_AGE + 1):
-                view.display = True
+                view.tab_shown()
                 await settle(app, pilot)
             self.assertEqual(fetch.call_args_list, [call("Victoria, BC", METRIC)] * 2)
 

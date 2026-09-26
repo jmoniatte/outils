@@ -1,5 +1,8 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import datetime
+from functools import partial
+from typing import Any
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -14,6 +17,7 @@ from ..click_only import click_only
 from ..config import Config
 from ..nmcli import Network, NmcliError, Scan
 from ..screens import DetailsScreen, PasswordScreen, ShareScreen
+from ..wifi_operations import Operations
 from .networks_table import NetworkColors, NetworksTable
 
 # (id, label, the Network field that tells its rows apart)
@@ -46,12 +50,10 @@ class WifiView(Vertical):
 
     def __init__(self, config: Config) -> None:
         super().__init__(id="wifi")
-        # The SSID being joined, so a second connect or a refresh does not run over it
-        self.connecting: str | None = None
-        # What the footer status is made of; see _show_status
+        self.operations = Operations(self._load_networks)
+        # What the footer status is made of, with the operations; see _show_status
         self.wifi_on = True
         self.connectivity = "unknown"
-        self.scanning = False
         # The last nmcli failure while loading, so it is shown once, not on every refresh
         self._load_error: str | None = None
         # The list takes focus only while the tab shows: TabbedContent would switch to a hidden one
@@ -85,7 +87,7 @@ class WifiView(Vertical):
     def on_mount(self) -> None:
         # The tables keep focus; the lists switch by click or with the arrows
         self.query_one(Tabs).can_focus = False
-        self.timer = self.set_interval(REFRESH_SECONDS, self._refresh, pause=True)
+        self.timer = self.set_interval(REFRESH_SECONDS, partial(self.load_networks, tick=True), pause=True)
 
     def tab_shown(self) -> None:
         """The tab shows: focus on the list, and ask nmcli until it hides."""
@@ -160,13 +162,12 @@ class WifiView(Vertical):
 
     @on(Button.Pressed, "#btn-wifi")
     def action_toggle_wifi(self) -> None:
-        if not self._still_connecting():
-            self._toggle_wifi()
+        on = not self.wifi_on
+        self._change(f"turning Wi-Fi {'on' if on else 'off'}", partial(nmcli.set_wifi, on), partial(self._wifi_set, on))
 
     @on(Button.Pressed, "#btn-disconnect")
     def action_disconnect(self) -> None:
-        if not self._still_connecting():
-            self._disconnect()
+        self._change("disconnecting", nmcli.disconnect, self._disconnected)
 
     def action_login_page(self) -> None:
         if self.connectivity == "portal":
@@ -179,7 +180,7 @@ class WifiView(Vertical):
 
     def action_forget(self) -> None:
         network = self.table.selected_network()
-        if network is None or self._still_connecting():
+        if network is None or self._busy():
             return
         if not network.saved:
             self.app.notify(f"{network.ssid} is not saved")
@@ -192,16 +193,20 @@ class WifiView(Vertical):
         )
         self.app.push_screen(dialog, callback=lambda confirmed: self._forget(network) if confirmed else None)
 
+    def _forget(self, network: Network) -> None:
+        self._change(
+            f"forgetting {network.ssid}",
+            partial(nmcli.forget, network),
+            lambda _: self.app.notify(f"Forgot {network.ssid}"),
+        )
+
     # -- nmcli
 
-    def _refresh(self) -> None:
-        # A slow rescan must not be cancelled by the quick refresh
-        scanning = any(worker.group == "wifi-scan" and worker.is_running for worker in self.app.workers)
-        if self.connecting is None and not scanning:
-            self.load_networks()
+    @work(group="wifi-scan")
+    async def load_networks(self, rescan: bool = False, tick: bool = False) -> None:
+        await self.operations.scan(rescan, tick)
 
-    @work(exclusive=True, group="wifi-scan")
-    async def load_networks(self, rescan: bool = False) -> None:
+    async def _load_networks(self, rescan: bool) -> None:
         """Show what NetworkManager last saw; with rescan, then wait the few seconds a fresh scan takes and show that."""
         try:
             self.wifi_on = await asyncio.to_thread(nmcli.wifi_enabled)
@@ -222,13 +227,13 @@ class WifiView(Vertical):
         self.connectivity = await asyncio.to_thread(nmcli.connectivity)
         self._show_scan(await asyncio.to_thread(nmcli.scan))
         if rescan:
-            self.scanning = True
+            self.operations.scanning = True
             self._show_status()
             try:
                 scan = await asyncio.to_thread(nmcli.scan, True)
             finally:
                 # Not redrawn here: cancelled as the app quits, the view may be gone
-                self.scanning = False
+                self.operations.scanning = False
             self._show_scan(scan)
 
     def _show_scan(self, scan: Scan) -> None:
@@ -239,8 +244,9 @@ class WifiView(Vertical):
     def _show_status(self) -> None:
         """The one thing worth saying in the footer, most urgent first; the list labels hold the counts."""
         self._show_buttons()
-        if self.connecting is not None:
-            self._set_status(f"Connecting to {self.connecting}...")
+        change = self.operations.change
+        if change is not None:
+            self._set_status(f"{change[0].upper()}{change[1:]}...")
         elif not self.wifi_on:
             self._set_status("Wi-Fi is off", warning=True)
         elif self.connectivity == "portal":
@@ -248,7 +254,7 @@ class WifiView(Vertical):
         elif self.connectivity == "limited":
             self._set_status("No internet access", warning=True)
         else:
-            self._set_status("Scanning..." if self.scanning else "")
+            self._set_status("Scanning..." if self.operations.scanning else "")
 
     def _show_buttons(self) -> None:
         """Red to turn the radio off, green to turn it on; rescanning and disconnecting need it on."""
@@ -269,7 +275,7 @@ class WifiView(Vertical):
         self.query_one("#networks-scanned").display = not text
 
     def _connect_requested(self, network: Network) -> None:
-        if self._still_connecting():
+        if self._busy():
             return
         if network.in_use:
             self._show_details()
@@ -283,19 +289,6 @@ class WifiView(Vertical):
         else:
             self.app.push_screen(PasswordScreen(network, self._connect))
 
-    @work(exclusive=True, group="wifi-connect")
-    async def _toggle_wifi(self) -> None:
-        on = not self.wifi_on
-        try:
-            await asyncio.to_thread(nmcli.set_wifi, on)
-        except NmcliError as error:
-            self.app.notify(str(error), severity="error")
-            return
-        self.app.notify("Wi-Fi turned on" if on else "Wi-Fi turned off")
-        self.load_networks()
-        if on:
-            self.set_timer(WIFI_ON_DELAY, self.load_networks)
-
     @work(exclusive=True, group="wifi-details")
     async def _show_details(self) -> None:
         try:
@@ -308,49 +301,64 @@ class WifiView(Vertical):
         else:
             self.app.push_screen(DetailsScreen(details))
 
-    def _still_connecting(self) -> bool:
-        """Warn and say so when a connect is running; nothing else may change the connection meanwhile."""
-        if self.connecting is not None:
-            self.app.notify(f"Still connecting to {self.connecting}", severity="warning")
-        return self.connecting is not None
+    def _busy(self) -> bool:
+        """Warn and say so when a connection change runs: nmcli cannot be stopped midway."""
+        change = self.operations.change
+        if change is not None:
+            self.app.notify(f"Still {change}", severity="warning")
+        return change is not None
 
-    @work(exclusive=True, group="wifi-connect")
-    async def _connect(self, network: Network, password: str = "", dialog: PasswordScreen | None = None) -> None:
-        """Join a network; a password dialog, while still open, shows the error or closes on success."""
-        self.connecting = network.ssid
+    def _change(
+        self,
+        change: str,
+        call: Callable[[], Any],
+        done: Callable[[Any], None],
+        failed: Callable[[NmcliError], None] | None = None,
+    ) -> None:
+        """Start a connection change, or warn about the one running; done gets what call returns."""
+        started = self.operations.start(change, call)
+        if started is None:
+            self._busy()
+            return
+        self._finish(started, done, failed or self._failed)
         self._show_status()
+
+    @work(group="wifi-change")
+    async def _finish(
+        self, change: Awaitable[Any], done: Callable[[Any], None], failed: Callable[[NmcliError], None]
+    ) -> None:
         try:
-            await asyncio.to_thread(nmcli.connect, network, password)
+            result = await change
         except NmcliError as error:
+            failed(error)
+        else:
+            done(result)
+        self.load_networks()
+
+    def _failed(self, error: NmcliError) -> None:
+        self.app.notify(str(error), severity="error")
+
+    def _connect(self, network: Network, password: str = "", dialog: PasswordScreen | None = None) -> None:
+        """Join a network; a password dialog, while still open, shows the error or closes on success."""
+
+        def done(_: None) -> None:
+            if dialog is not None and dialog.is_attached:
+                dialog.dismiss()
+            self.app.notify(f"Connected to {network.ssid}")
+
+        def failed(error: NmcliError) -> None:
             if dialog is not None and dialog.is_attached:
                 dialog.failed(str(error))
             else:
                 hint = ". Press f to forget it and enter the password again" if network.saved else ""
                 self.app.notify(f"Could not connect to {network.ssid}: {error}{hint}", severity="error", timeout=10)
-        else:
-            if dialog is not None and dialog.is_attached:
-                dialog.dismiss()
-            self.app.notify(f"Connected to {network.ssid}")
-        finally:
-            self.connecting = None
-        self.load_networks()
 
-    @work(exclusive=True, group="wifi-connect")
-    async def _disconnect(self) -> None:
-        try:
-            name = await asyncio.to_thread(nmcli.disconnect)
-        except NmcliError as error:
-            self.app.notify(str(error), severity="error")
-            return
+        self._change(f"connecting to {network.ssid}", partial(nmcli.connect, network, password), done, failed)
+
+    def _wifi_set(self, on: bool, _: None) -> None:
+        self.app.notify("Wi-Fi turned on" if on else "Wi-Fi turned off")
+        if on:
+            self.set_timer(WIFI_ON_DELAY, self.load_networks)
+
+    def _disconnected(self, name: str | None) -> None:
         self.app.notify(f"Disconnected from {name}" if name else "Not connected to Wi-Fi")
-        self.load_networks()
-
-    @work(exclusive=True, group="wifi-connect")
-    async def _forget(self, network: Network) -> None:
-        try:
-            await asyncio.to_thread(nmcli.forget, network)
-        except NmcliError as error:
-            self.app.notify(str(error), severity="error")
-            return
-        self.app.notify(f"Forgot {network.ssid}")
-        self.load_networks()

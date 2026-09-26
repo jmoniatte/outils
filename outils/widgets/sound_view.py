@@ -80,17 +80,18 @@ class SoundView(Vertical):
 
     # -- the cards
 
-    def cards(self, section_id: str | None = None) -> list[DeviceCard]:
-        """The cards on show, top to bottom, of one section or of both."""
-        sections = [section_id] if section_id else SECTIONS
-        return [card for section in sections for card in self.query_one(f"#{section}-cards").query(DeviceCard)]
+    def cards(self) -> list[DeviceCard]:
+        """The cards on show, top to bottom, of both sections."""
+        return [card for section in SECTIONS for card in self.query_one(f"#{section}-cards").query(DeviceCard)]
 
     def _focus_card(self, wanted_id: str | None = None) -> None:
         """Focus on the card with that id, else on the output in use, else on the first card."""
         cards = self.cards()
-        in_use = [card for card in self.cards("outputs") if card.device.default]
-        if target := next((card for card in cards if card.id == wanted_id), None) or next(iter(in_use + cards), None):
-            target.focus()
+        if not cards:
+            return
+        wanted = next((card for card in cards if card.id == wanted_id), None)
+        in_use = next((card for card in cards if card.device.kind == pactl.SINK and card.device.default), None)
+        (wanted or in_use or cards[0]).focus()
 
     def _is_busy(self, device: Device) -> bool:
         return self.bluetooth_busy is not None and device.mac == self.bluetooth_busy.mac
@@ -149,7 +150,7 @@ class SoundView(Vertical):
 
     async def _load_mixer(self) -> None:
         try:
-            mixer = await self._mixer()
+            mixer = await self._pactl(pactl.mixer)
         except PactlError as error:
             # Said once, not on every reload, while pactl keeps failing
             if str(error) != self._load_error:
@@ -162,9 +163,10 @@ class SoundView(Vertical):
         if not self._reload.overtaken:
             await self.show(bluetooth.merge(mixer, headsets))
 
-    async def _mixer(self) -> Mixer:
+    async def _pactl(self, call, *args):
+        """Every pactl call the view makes goes through here, so they run one at a time."""
         async with self._pactl_lock:
-            return await asyncio.to_thread(pactl.mixer)
+            return await asyncio.to_thread(call, *args)
 
     @on(VolumeRequested)
     def _volume_requested(self, event: VolumeRequested) -> None:
@@ -215,7 +217,7 @@ class SoundView(Vertical):
                 await asyncio.to_thread(bluetooth.connect, device.mac)
                 self.app.notify(f"Connected to {device.label}")
                 if use and (sink := await self._wait_for_sink(device.mac)) is not None:
-                    await asyncio.to_thread(pactl.set_default, sink)
+                    await self._pactl(pactl.set_default, sink)
                     self.app.notify(f"Playing on {sink.label}")
             await asyncio.to_thread(status_bar.refresh)
         except (BluetoothError, PactlError) as error:
@@ -228,7 +230,7 @@ class SoundView(Vertical):
     async def _wait_for_sink(self, mac: str) -> Device | None:
         """The sink of headphones that just connected; PipeWire takes a moment to make it."""
         for _ in range(int(SINK_WAIT_SECONDS / SINK_POLL_SECONDS)):
-            mixer = await self._mixer()
+            mixer = await self._pactl(pactl.mixer)
             if sink := next((device for device in mixer.outputs if device.mac == mac), None):
                 return sink
             await asyncio.sleep(SINK_POLL_SECONDS)
@@ -238,8 +240,7 @@ class SoundView(Vertical):
     @work(group="sound-change")
     async def _change(self, call, *args, message: str = "") -> None:
         try:
-            async with self._pactl_lock:
-                await asyncio.to_thread(call, *args)
+            await self._pactl(call, *args)
         except PactlError as error:
             self.app.notify(str(error), severity="error")
         else:

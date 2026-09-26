@@ -39,7 +39,7 @@ class TimeView(Vertical):
         # One timer for both, so how far from now is never drawn before now moves on
         self.set_interval(1, self.tick)
 
-    def on_show(self) -> None:
+    def tab_shown(self) -> None:
         self.follow_now()
 
     def tick(self) -> None:

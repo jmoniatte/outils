@@ -19,6 +19,7 @@ from outils.screens.qr_screen import QrScreen
 from outils.widgets import WifiView
 from outils.widgets.networks_table import NetworksTable
 from outils.widgets.wifi_view import LOGIN_PAGE_URL
+from outils.wifi_operations import Operations
 from tests.host import footer_message, settle
 
 HOME = Network("Home", signal=70, security="WPA3", frequency=6295, in_use=True, saved_uuid="u1")
@@ -139,12 +140,12 @@ class WifiTest(unittest.TestCase):
             await pilot.pause()
             await pilot.press(*"pw", "enter")
             await pilot.pause()
-            self.assertEqual(view.connecting, "Cafe")
+            self.assertEqual(view.operations.change, "connecting to Cafe")
 
             await pilot.press("escape")
             await pilot.pause()
             self.assertNotIsInstance(app.screen, PasswordScreen)
-            self.assertEqual((view.connecting, status(app)), ("Cafe", "Connecting to Cafe..."))
+            self.assertEqual((view.operations.change, status(app)), ("connecting to Cafe", "Connecting to Cafe..."))
 
             # nmcli cannot be stopped midway, so nothing else may change the connection until it ends
             nearby_table(app).move_cursor(row=2)
@@ -154,11 +155,69 @@ class WifiTest(unittest.TestCase):
 
             release.set()
             await settle(app, pilot)
-            self.assertIsNone(view.connecting)
+            self.assertIsNone(view.operations.change)
             self.assertEqual(footer_message(app), "Connected to Cafe")
             mocks["connect"].assert_called_once_with(CAFE, "pw")
 
         self.run_app(body, connect=connect)
+
+    def test_connection_changes_run_one_at_a_time_until_nmcli_ends(self):
+        release = threading.Event()
+
+        async def body(app, pilot, mocks):
+            mocks["connect"].side_effect = lambda network, password="": release.wait(5)
+            mocks["disconnect"].side_effect = lambda: release.wait(5) and "Home"
+            view = app.query_one(WifiView)
+            nearby_table(app).move_cursor(row=2)
+            await pilot.press("enter", "d")
+            await pilot.pause()
+            self.assertEqual(footer_message(app), "Still connecting to Work")
+            mocks["disconnect"].assert_not_called()
+            release.set()
+            await settle(app, pilot)
+            mocks["connect"].assert_called_once_with(WORK, "")
+
+            # And the other way round: a connect waits for the disconnect
+            release.clear()
+            await pilot.press("d", "enter")
+            await pilot.pause()
+            self.assertEqual((footer_message(app), status(app)), ("Still disconnecting", "Disconnecting..."))
+            mocks["connect"].assert_called_once()
+            release.set()
+            await settle(app, pilot)
+            self.assertEqual((footer_message(app), status(app)), ("Disconnected from Home", ""))
+            self.assertIsNone(view.operations.change)
+
+        self.run_app(body)
+
+    def test_rescans_never_overlap(self):
+        gate = threading.Event()
+        lock = threading.Lock()
+        rescans = {"running": 0, "most": 0, "calls": 0}
+
+        def scan(rescan=False):
+            if rescan:
+                with lock:
+                    rescans["running"] += 1
+                    rescans["calls"] += 1
+                    rescans["most"] = max(rescans["most"], rescans["running"])
+                gate.wait(5)
+                with lock:
+                    rescans["running"] -= 1
+            return SCAN
+
+        async def body(app, pilot, mocks):
+            mocks["scan"].side_effect = scan
+            await pilot.press("r")
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            self.assertEqual(status(app), "Scanning...")
+            gate.set()
+            await settle(app, pilot)
+            self.assertEqual((rescans["most"], rescans["calls"], status(app)), (1, 1, ""))
+
+        self.run_app(body)
 
     def test_a_saved_network_connects_on_click_without_asking(self):
         async def body(app, pilot, mocks):
@@ -181,7 +240,7 @@ class WifiTest(unittest.TestCase):
                 footer_message(app),
                 "Could not connect to Work: Timed out. Press f to forget it and enter the password again",
             )
-            self.assertIsNone(app.query_one(WifiView).connecting)
+            self.assertIsNone(app.query_one(WifiView).operations.change)
 
         self.run_app(body, connect=NmcliError("Timed out"))
 
@@ -441,6 +500,25 @@ class WifiTest(unittest.TestCase):
             self.assertEqual(general, ["?", "t", "y", "tab", "q"])
 
         self.run_app(body)
+
+
+class OperationsTest(unittest.TestCase):
+    def test_a_change_holds_until_its_call_ends_even_when_its_awaiter_is_cancelled(self):
+        release = threading.Event()
+
+        async def main():
+            operations = Operations(None)
+            waiter = asyncio.ensure_future(operations.start("connecting to Cafe", lambda: release.wait(5)))
+            self.assertIsNone(operations.start("disconnecting", lambda: None))
+            await asyncio.sleep(0.05)
+            waiter.cancel()
+            await asyncio.sleep(0.05)
+            self.assertEqual(operations.change, "connecting to Cafe")
+            release.set()
+            await asyncio.sleep(0.05)
+            self.assertIsNone(operations.change)
+
+        asyncio.run(main())
 
 
 if __name__ == "__main__":

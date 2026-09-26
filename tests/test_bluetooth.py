@@ -1,10 +1,12 @@
 import subprocess
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from outils import bluetooth
 from outils.bluetooth import BluetoothError, Headset
 from outils.pactl import SINK, Device, Mixer
+from outils.widgets.device_card import card_id
 
 SHOKZ_INFO = """Device A8:F5:E1:E4:7D:DA (public)
 \tName: OpenRun by Shokz
@@ -42,7 +44,16 @@ class BluetoothTest(unittest.TestCase):
         )
         self.assertEqual([device.battery for device in merged.outputs], [None, 80, None])
         added = merged.outputs[2]
-        self.assertEqual((added.label, added.mac, added.connected, added.playable), ("Speaker", "00:11", False, False))
+        self.assertEqual((added.label, added.mac, added.connected, added.index, added.playable), ("Speaker", "00:11", False, None, False))
+
+    def test_headphones_keep_their_card_whatever_else_connects(self):
+        shokz = Headset("A8:F5:E1:E4:7D:DA", "OpenRun by Shokz", False)
+        speaker = Headset("00:11:22:33:44:55", "Speaker", False)
+        shokz_sink = Device(SINK, 4, "bluez_output.A8_F5_E1_E4_7D_DA.1", "OpenRun by Shokz", 60, False, mac=shokz.mac)
+        before = bluetooth.merge(Mixer(), [shokz, speaker]).outputs
+        after = bluetooth.merge(Mixer(outputs=[shokz_sink]), [replace(shokz, connected=True), speaker]).outputs
+        self.assertEqual([card_id(device) for device in before], [card_id(device) for device in after])
+        self.assertEqual(card_id(before[1]), "device-sink-00_11_22_33_44_55")
 
     def test_failures_become_bluetooth_errors(self):
         # bluetoothctl prints its failures on stdout, sometimes with exit status 0
