@@ -1,6 +1,5 @@
 """One device as a row: its name, its volume and its buttons, all on one line."""
 
-import re
 
 from rich.text import Text
 from textual import events, on
@@ -74,8 +73,8 @@ def battery_text(level: int) -> str:
 
 
 def card_id(device: Device) -> str:
-    # A widget id takes only letters, digits, - and _: a MAC's colons and a name's dots become _
-    return "device-" + re.sub(r"[^A-Za-z0-9_-]", "_", device.key)
+    # A widget id takes only letters, digits, - and _; hex keeps every key distinct, punctuation and all
+    return f"device-{device.key.encode().hex()}"
 
 
 class VolumeBar(Widget):

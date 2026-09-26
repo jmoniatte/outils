@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import contextlib
 import tempfile
 import threading
@@ -503,22 +504,65 @@ class WifiTest(unittest.TestCase):
 
 
 class OperationsTest(unittest.TestCase):
-    def test_a_change_holds_until_its_call_ends_even_when_its_awaiter_is_cancelled(self):
-        release = threading.Event()
+    def run_change(self, body, outcome=None):
+        """body gets the operations and a waiter on a change whose call starts, then holds until released;
+        the call then returns, or raises outcome."""
+        started, release = threading.Event(), threading.Event()
+
+        def call():
+            started.set()
+            release.wait(5)
+            if outcome:
+                raise outcome
 
         async def main():
             operations = Operations(None)
-            waiter = asyncio.ensure_future(operations.start("connecting to Cafe", lambda: release.wait(5)))
-            self.assertIsNone(operations.start("disconnecting", lambda: None))
-            await asyncio.sleep(0.05)
-            waiter.cancel()
-            await asyncio.sleep(0.05)
-            self.assertEqual(operations.change, "connecting to Cafe")
-            release.set()
-            await asyncio.sleep(0.05)
-            self.assertIsNone(operations.change)
+            waiter = asyncio.ensure_future(operations.start("connecting to Cafe", call))
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 5))
+                await body(operations, waiter, release)
+            finally:
+                release.set()
 
         asyncio.run(main())
+
+    async def until(self, condition) -> None:
+        for _ in range(500):
+            if condition():
+                return
+            await asyncio.sleep(0.01)
+        self.fail("timed out")
+
+    def test_a_change_holds_until_its_call_ends_even_when_its_awaiter_is_cancelled(self):
+        async def body(operations, waiter, release):
+            self.assertIsNone(operations.start("disconnecting", lambda: None))
+            waiter.cancel()
+            await asyncio.sleep(0)
+            self.assertEqual(operations.change, "connecting to Cafe")
+            release.set()
+            await self.until(lambda: operations.change is None)
+
+        self.run_change(body)
+
+    def test_a_failure_reaches_the_awaiter_or_is_dropped_quietly_when_none_is_left(self):
+        async def awaited(operations, waiter, release):
+            release.set()
+            with self.assertRaises(NmcliError):
+                await waiter
+
+        self.run_change(awaited, NmcliError("Secrets were required"))
+        unretrieved = []
+
+        async def abandoned(operations, waiter, release):
+            asyncio.get_running_loop().set_exception_handler(lambda loop, context: unretrieved.append(context))
+            waiter.cancel()
+            release.set()
+            await self.until(lambda: operations.change is None)
+            gc.collect()
+            await asyncio.sleep(0)
+
+        self.run_change(abandoned, NmcliError("Secrets were required"))
+        self.assertEqual(unretrieved, [])
 
 
 if __name__ == "__main__":

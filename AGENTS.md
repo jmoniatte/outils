@@ -341,7 +341,7 @@ from `screen_x`, not `event.x`.
 every 2 seconds does not steal focus or flicker; when the list changes, it remounts that
 section's cards and puts focus back on the same device. A card's id comes from `Device.key`, the
 kind and the Bluetooth address for headphones, connected or not, else the kind and pactl's name,
-never pactl's index, which is only for pactl's commands.
+never pactl's index, which is only for pactl's commands. It is the key in hex (`card_id`), so names that differ only in punctuation stay apart.
 
 `pactl.mixer` reads `pactl --format=json` for `info` (the default sink and source), `sinks` and
 `sources`. `parse_devices` drops a device whose active port reports `not available` (the video
@@ -437,7 +437,8 @@ when the app unmounts; otherwise quitting during a rescan hangs until it ends. A
 cancelled, since nmcli cannot be stopped midway and its thread would carry on. A connection change
 (connect, disconnect, forget, `w`) runs one at a time: `Operations.change` says what runs
 ("connecting to Cafe") from the request until the nmcli call really ends, even if whatever awaits it
-is cancelled, and any other change asked meanwhile is refused with "Still connecting to Cafe" (or
+is cancelled (it holds the call's task until then and reads its outcome, so a failure nobody
+awaits any more is dropped quietly), and any other change asked meanwhile is refused with "Still connecting to Cafe" (or
 "Still disconnecting", ...) and shown in the footer status. Scans go through a `Reload`: a timer
 tick is skipped while a scan or a change runs, any other request runs the scan once more after
 the one running, and `r` during a rescan does not ask for another rescan.

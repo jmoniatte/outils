@@ -169,6 +169,15 @@ class SoundTest(unittest.TestCase):
         with patch("outils.widgets.sound_view.REFRESH_SECONDS", 0.05):
             self.run_app(body)
 
+    def test_devices_whose_names_differ_only_in_punctuation_get_a_card_each(self):
+        dotted, underscored = replace(LAPTOP, name="output.one"), replace(MONITOR, name="output_one")
+
+        async def body(app, pilot, mocks):
+            self.assertEqual(len(app.query(DeviceCard)), 3)
+            self.assertIsNot(card(app, dotted), card(app, underscored))
+
+        self.run_app(body, mixer=Mixer(outputs=[dotted, underscored], inputs=[MIC]))
+
     def test_opens_on_the_output_in_use_and_no_microphone_hides_its_section(self):
         async def body(app, pilot, mocks):
             self.assertIs(app.focused, card(app, MONITOR))

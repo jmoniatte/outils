@@ -23,6 +23,7 @@ class Operations:
         # While nmcli rescans, which takes around 10 seconds
         self.scanning = False
         self._rescan = False
+        self._task: asyncio.Future | None = None
         self._reload = Reload(self._scan)
 
     def start(self, change: str, call: Callable[[], Any]) -> Awaitable[Any] | None:
@@ -30,12 +31,18 @@ class Operations:
         if self.change is not None:
             return None
         self.change = change
-        task = asyncio.ensure_future(asyncio.to_thread(call))
-        task.add_done_callback(self._changed)
-        return asyncio.shield(task)
+        # Held until it ends: the loop keeps only a weak reference to a task
+        self._task = asyncio.ensure_future(asyncio.to_thread(call))
+        self._task.add_done_callback(self._ended)
+        return asyncio.shield(self._task)
 
-    def _changed(self, task: asyncio.Future) -> None:
+    def _ended(self, task: asyncio.Future) -> None:
         self.change = None
+        self._task = None
+        # Read here, so a failure whose awaiter was cancelled is not reported as never retrieved;
+        # an awaiter still waiting gets it all the same, through the shield
+        if not task.cancelled():
+            task.exception()
 
     async def scan(self, rescan: bool = False, tick: bool = False) -> None:
         """Load the networks, or have the scan running load them once more after."""

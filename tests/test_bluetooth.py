@@ -53,7 +53,9 @@ class BluetoothTest(unittest.TestCase):
         before = bluetooth.merge(Mixer(), [shokz, speaker]).outputs
         after = bluetooth.merge(Mixer(outputs=[shokz_sink]), [replace(shokz, connected=True), speaker]).outputs
         self.assertEqual([card_id(device) for device in before], [card_id(device) for device in after])
-        self.assertEqual(card_id(before[1]), "device-sink-00_11_22_33_44_55")
+        # Names that differ only in punctuation still get cards of their own
+        dotted, underscored = (Device(SINK, number, name, name, 50, False) for number, name in ((1, "output.one"), (2, "output_one")))
+        self.assertNotEqual(card_id(dotted), card_id(underscored))
 
     def test_failures_become_bluetooth_errors(self):
         # bluetoothctl prints its failures on stdout, sometimes with exit status 0
