@@ -2,6 +2,7 @@ import asyncio
 import os
 import subprocess
 import tempfile
+import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -32,19 +33,49 @@ class DropboxTest(unittest.TestCase):
             with self.assertRaisesRegex(DropboxError, "did not answer"):
                 status()
 
-    def test_start_gives_the_daemon_no_pipe_to_hold(self):
-        with patch("outils.dropbox.subprocess.Popen") as popen, patch("outils.dropbox.CHECK", 0):
-            popen.return_value.poll.side_effect = [None, 0]
+    def test_status_failing_is_an_error_but_a_stopped_client_is_not(self):
+        stopped = subprocess.CompletedProcess([], 0, stdout="Dropbox isn't running!\n", stderr="DeprecationWarning")
+        with patch("outils.dropbox.processes.run", return_value=stopped):
+            self.assertEqual(state(status()), STOPPED)
+        crashed = subprocess.CompletedProcess([], 1, stdout="", stderr="DeprecationWarning\nTraceback\nOSError: no socket\n")
+        with patch("outils.dropbox.processes.run", return_value=crashed), self.assertRaisesRegex(DropboxError, "^OSError: no socket$"):
+            status()
+        said = subprocess.CompletedProcess([], 2, stdout="Unknown command\n", stderr="")
+        with patch("outils.dropbox.processes.run", return_value=said), self.assertRaisesRegex(DropboxError, "^Unknown command$"):
+            status()
+        silent = subprocess.CompletedProcess([], 2, stdout="", stderr="")
+        with patch("outils.dropbox.processes.run", return_value=silent), self.assertRaisesRegex(DropboxError, "dropbox status failed"):
+            status()
+
+    def test_start_gives_the_daemon_no_pipe_to_hold_and_waits_until_it_answers(self):
+        answers = iter(["Dropbox isn't running!", "Starting..."])
+        with (
+            patch("outils.dropbox.subprocess.Popen") as popen,
+            patch("outils.dropbox.status", side_effect=lambda: next(answers)) as status,
+            patch("outils.dropbox.CHECK", 0),
+        ):
+            popen.return_value.poll.side_effect = [None, 0, 0, 0]
+            popen.return_value.returncode = 0
             asyncio.run(start())
+            self.assertEqual(status.call_count, 2)
             self.assertEqual(popen.call_args.args[0], ["dropbox", "start"])
             self.assertEqual(popen.call_args.kwargs["stdout"], subprocess.DEVNULL)
             self.assertEqual(popen.call_args.kwargs["stderr"], subprocess.DEVNULL)
             self.assertTrue(popen.call_args.kwargs["start_new_session"])
+            # Exited, but the daemon never answers
             popen.return_value.poll.side_effect = None
+            popen.return_value.poll.return_value = 0
+            status.side_effect = None
+            status.return_value = "Dropbox isn't running!"
+            with patch("outils.dropbox.START_TIMEOUT", 0), self.assertRaisesRegex(DropboxError, "did not start"):
+                asyncio.run(start())
+            popen.return_value.returncode = 1
+            with self.assertRaisesRegex(DropboxError, "dropbox start failed"):
+                asyncio.run(start())
             popen.return_value.poll.return_value = None
             with patch("outils.dropbox.START_TIMEOUT", 0), self.assertRaisesRegex(DropboxError, "did not start"):
                 asyncio.run(start())
-            popen.return_value.kill.assert_called_once()
+            popen.return_value.kill.assert_called()
 
     def test_stop_waits_until_the_daemon_is_gone(self):
         answers = iter(["Up to date", "Up to date", "Dropbox isn't running!"])
@@ -191,6 +222,34 @@ class DropboxViewTest(unittest.TestCase):
             self.assertEqual(str(toggle.label), "Start Dropbox")
 
         self.run_view(body)
+
+    def test_a_slow_poll_is_not_restarted_by_the_timer_and_a_switch_polls_after_it(self):
+        async def body(app, pilot):
+            gate = threading.Event()
+            answers = ["Up to date"]
+
+            def slow_status():
+                # What the client says when asked, handed back once the gate opens
+                answer = answers[-1]
+                gate.wait(5)
+                return answer
+
+            self.status.side_effect = slow_status
+            self.status.reset_mock()
+            await pilot.pause(0.5)
+            # Ticks while the client is slow do not ask it again
+            self.assertEqual(self.status.call_count, 1)
+            app.view.timer.pause()
+            answers.append("Dropbox isn't running!")
+            await pilot.click("#btn-dropbox-toggle")
+            await pilot.pause()
+            gate.set()
+            await settle(app, pilot)
+            self.assertEqual(self.status.call_count, 2)
+            self.assertEqual(str(app.query_one("#btn-dropbox-toggle").label), "Start Dropbox")
+
+        with patch("outils.widgets.dropbox_view.POLL", 0.05):
+            self.run_view(body)
 
     def test_the_list_scrolls_when_the_files_do_not_fit(self):
         async def body(app, pilot):

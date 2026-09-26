@@ -1,9 +1,9 @@
 import asyncio
 import tempfile
 import unittest
-from datetime import date
+from time import time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from textual.app import App
 from textual.widgets import Input
@@ -12,7 +12,7 @@ from outils.app import OutilsApp
 from outils.config import Config
 from outils.weather import IMPERIAL, METRIC, WeatherError, parse_forecast
 from outils.widgets import WeatherView
-from outils.widgets.weather_view import ForecastView
+from outils.widgets.weather_view import MAX_AGE, ForecastView
 
 from tests.host import Host, settle
 from tests.test_weather import FORECAST, PLACE
@@ -27,7 +27,7 @@ def shown(app: App) -> list[str]:
 class WeatherViewTest(unittest.TestCase):
     def run_view(self, config, body, **patches):
         async def main():
-            app = Host(WeatherView(config, today=date(2026, 9, 24)))
+            app = Host(WeatherView(config))
             with patch("outils.widgets.weather_view.forecast", **patches) as fetch:
                 async with app.run_test(size=(90, 24)) as pilot:
                     await settle(app, pilot)
@@ -49,8 +49,9 @@ class WeatherViewTest(unittest.TestCase):
             self.assertTrue(lines[3].startswith("Today"))
             self.assertIn("Light rain", lines[3])
             self.assertIn("18° /   9°      79 %      6.5 mm", lines[3])
-            # A day with no chance of rain given shows a dash
+            # The days are named from the forecast's own dates, today at the place first
             self.assertTrue(lines[4].startswith("Friday      "))
+            # A day with no chance of rain given shows a dash
             self.assertIn("  – %", lines[4])
 
         self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
@@ -104,6 +105,23 @@ class WeatherViewTest(unittest.TestCase):
             self.assertEqual(fetch.call_count, 2)
 
         self.run_view(Config(location="Victoria, BC"), body, side_effect=lambda location, units: parse_forecast(PLACE, units, FORECAST))
+
+    def test_a_forecast_older_than_max_age_is_asked_again_when_the_tab_shows(self):
+        async def body(app, pilot, fetch):
+            view = app.view
+            view.display = False
+            await pilot.pause()
+            view.display = True
+            await settle(app, pilot)
+            self.assertEqual(fetch.call_count, 1)
+            view.display = False
+            await pilot.pause()
+            with patch("outils.widgets.weather_view.time", return_value=time() + MAX_AGE + 1):
+                view.display = True
+                await settle(app, pilot)
+            self.assertEqual(fetch.call_args_list, [call("Victoria, BC", METRIC)] * 2)
+
+        self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
 
     def test_an_error_shows_in_the_view_and_the_footer(self):
         async def body(app, pilot, fetch):

@@ -16,7 +16,8 @@ from ..nmcli import Network, NmcliError, Scan
 from ..screens import DetailsScreen, PasswordScreen, ShareScreen
 from .networks_table import NetworkColors, NetworksTable
 
-TABS = (("nearby", "Nearby"), ("saved", "Saved"))
+# (id, label, the Network field that tells its rows apart)
+TABS = (("nearby", "Nearby", "ssid"), ("saved", "Saved", "saved_uuid"))
 # NetworkManager rescans on its own; this only picks up what it found
 REFRESH_SECONDS = 10
 # A login page intercepts any plain http address; this one exists for that and never redirects to https
@@ -59,11 +60,12 @@ class WifiView(Vertical):
 
     def compose(self) -> ComposeResult:
         with TabbedContent(initial="nearby", id="networks-tabs"):
-            for tab_id, label in TABS:
+            for tab_id, label, key in TABS:
                 with TabPane(label, id=tab_id):
                     # "renderable" keeps each cell's own color on the highlighted row too
                     yield NetworksTable(
                         self.colors(),
+                        key,
                         id=f"{tab_id}-table",
                         cursor_type="row",
                         zebra_stripes=False,
@@ -122,7 +124,7 @@ class WifiView(Vertical):
 
     def show(self, scan: Scan) -> None:
         tabs = self.query_one(TabbedContent)
-        for tab_id, label in TABS:
+        for tab_id, label, _ in TABS:
             networks = getattr(scan, tab_id)
             self.query_one(f"#{tab_id}-table", NetworksTable).show(networks)
             tabs.get_tab(tab_id).label = f"{label} ({len(networks)})"
@@ -279,7 +281,7 @@ class WifiView(Vertical):
                 severity="warning",
             )
         else:
-            self.app.push_screen(PasswordScreen(network), callback=lambda joined: self._password_done(network, joined))
+            self.app.push_screen(PasswordScreen(network, self._connect))
 
     @work(exclusive=True, group="wifi-connect")
     async def _toggle_wifi(self) -> None:
@@ -312,21 +314,22 @@ class WifiView(Vertical):
             self.app.notify(f"Still connecting to {self.connecting}", severity="warning")
         return self.connecting is not None
 
-    def _password_done(self, network: Network, joined: bool) -> None:
-        if joined:
-            self.app.notify(f"Connected to {network.ssid}")
-        self.load_networks()
-
     @work(exclusive=True, group="wifi-connect")
-    async def _connect(self, network: Network) -> None:
+    async def _connect(self, network: Network, password: str = "", dialog: PasswordScreen | None = None) -> None:
+        """Join a network; a password dialog, while still open, shows the error or closes on success."""
         self.connecting = network.ssid
         self._show_status()
         try:
-            await asyncio.to_thread(nmcli.connect, network)
+            await asyncio.to_thread(nmcli.connect, network, password)
         except NmcliError as error:
-            hint = ". Press f to forget it and enter the password again" if network.saved else ""
-            self.app.notify(f"Could not connect to {network.ssid}: {error}{hint}", severity="error", timeout=10)
+            if dialog is not None and dialog.is_attached:
+                dialog.failed(str(error))
+            else:
+                hint = ". Press f to forget it and enter the password again" if network.saved else ""
+                self.app.notify(f"Could not connect to {network.ssid}: {error}{hint}", severity="error", timeout=10)
         else:
+            if dialog is not None and dialog.is_attached:
+                dialog.dismiss()
             self.app.notify(f"Connected to {network.ssid}")
         finally:
             self.connecting = None

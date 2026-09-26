@@ -47,9 +47,10 @@ class MonthView(Widget):
         self.first_weekday = first_weekday
         self.today = today
 
-    def show(self, year: int, month: int) -> None:
+    def show(self, year: int, month: int, today: date) -> None:
         self.year = year
         self.month = month
+        self.today = today
         self.refresh()
 
     def _style(self, name: str):

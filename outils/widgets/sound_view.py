@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import replace
+from functools import partial
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -11,6 +12,7 @@ from .. import bluetooth, pactl, status_bar
 from ..bluetooth import BluetoothError
 from ..config import Config
 from ..pactl import MAX_VOLUME, Device, Mixer, PactlError
+from ..reload import Reload
 from .device_card import (
     BluetoothRequested,
     DefaultRequested,
@@ -55,6 +57,7 @@ class SoundView(Vertical):
         self._load_error: str | None = None
         # A card takes focus only while the tab shows: TabbedContent would switch to a hidden one
         self.showing = False
+        self._reload = Reload(self._load_mixer)
 
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="sound-sections"):
@@ -62,7 +65,7 @@ class SoundView(Vertical):
                 yield Vertical(id=f"{section_id}-cards", classes="section-cards")
 
     def on_mount(self) -> None:
-        self.timer = self.set_interval(REFRESH_SECONDS, self.load_mixer, pause=True)
+        self.timer = self.set_interval(REFRESH_SECONDS, partial(self.load_mixer, tick=True), pause=True)
 
     def tab_shown(self) -> None:
         """The tab shows: focus on the output in use, and ask pactl until it hides."""
@@ -140,8 +143,11 @@ class SoundView(Vertical):
 
     # -- pactl and bluetoothctl
 
-    @work(exclusive=True, group="sound-load")
-    async def load_mixer(self) -> None:
+    @work(group="sound-load")
+    async def load_mixer(self, tick: bool = False) -> None:
+        await self._reload.run(tick)
+
+    async def _load_mixer(self) -> None:
         try:
             mixer = await self._mixer()
         except PactlError as error:
@@ -152,7 +158,9 @@ class SoundView(Vertical):
             return
         self._load_error = None
         headsets = await asyncio.to_thread(bluetooth.headsets)
-        await self.show(bluetooth.merge(mixer, headsets))
+        # Not shown when a change came in meanwhile: it would undo the change on screen until the next reload
+        if not self._reload.overtaken:
+            await self.show(bluetooth.merge(mixer, headsets))
 
     async def _mixer(self) -> Mixer:
         async with self._pactl_lock:

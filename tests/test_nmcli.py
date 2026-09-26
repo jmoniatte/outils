@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from outils import nmcli
-from outils.nmcli import Network, NmcliError, parse_details, parse_profiles, parse_scan, parse_share, saved_list, split_terse
+from outils.nmcli import Network, NmcliError, Profile, parse_details, parse_profiles, parse_scan, parse_share, saved_list, split_terse
 
 SCAN = r""" :BRETZELS:2452 MHz:100:WPA2
  ::2452 MHz:100:WPA2
@@ -26,7 +26,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(split_terse("one"), ["one"])
 
     def test_scan_merges_access_points_and_puts_the_one_in_use_first(self):
-        networks = parse_scan(SCAN, saved={"Home:5G": "uuid-home"})
+        networks = parse_scan(SCAN, [Profile("Home:5G", "uuid-home")])
         self.assertEqual([n.ssid for n in networks], ["Home:5G", "BRETZELS", "Office", "Cafe"])
 
         home, bretzels, office, cafe = networks
@@ -37,19 +37,27 @@ class ParseTest(unittest.TestCase):
         self.assertTrue(office.enterprise)
         self.assertEqual((cafe.open, cafe.security, cafe.band), (True, "", "5 GHz"))
 
-    def test_profiles_map_each_ssid_to_its_uuid(self):
+    def test_profiles_are_all_listed_the_most_recently_used_first(self):
         output = (
-            "connection.uuid:u1\n802-11-wireless.ssid:Home\n\n"
-            "connection.uuid:u2\n802-11-wireless.ssid:Cafe\n\n"
-            "connection.uuid:u3\n802-11-wireless.ssid:\n"
+            "connection.uuid:u1\nconnection.timestamp:100\n802-11-wireless.ssid:Home\n\n"
+            "connection.uuid:u2\nconnection.timestamp:300\n802-11-wireless.ssid:Cafe\n\n"
+            "connection.uuid:u3\nconnection.timestamp:0\n802-11-wireless.ssid:\n\n"
+            "connection.uuid:u4\nconnection.timestamp:200\n802-11-wireless.ssid:Home\n"
         )
-        self.assertEqual(parse_profiles(output), {"Home": "u1", "Cafe": "u2"})
+        self.assertEqual(parse_profiles(output), [Profile("Cafe", "u2"), Profile("Home", "u4"), Profile("Home", "u1")])
 
     def test_saved_list_puts_profiles_in_range_first_then_the_others_by_name(self):
-        profiles = {"Home:5G": "u1", "zoo": "u2", "Attic": "u3"}
+        profiles = [Profile("Home:5G", "u1"), Profile("zoo", "u2"), Profile("Attic", "u3")]
         saved = saved_list(parse_scan(SCAN, profiles), profiles)
         self.assertEqual([(n.ssid, n.in_range) for n in saved], [("Home:5G", True), ("Attic", False), ("zoo", False)])
         self.assertEqual(saved[2].saved_uuid, "u2")
+
+    def test_two_profiles_for_one_ssid_are_one_nearby_row_and_two_saved_ones(self):
+        profiles = [Profile("Home:5G", "recent"), Profile("Home:5G", "older")]
+        nearby = parse_scan(SCAN, profiles)
+        self.assertEqual((nearby[0].ssid, nearby[0].saved_uuid), ("Home:5G", "recent"))
+        saved = saved_list(nearby, profiles)
+        self.assertEqual([(n.saved_uuid, n.in_use) for n in saved], [("recent", True), ("older", False)])
 
     def test_details_combine_the_device_and_the_access_point_in_use(self):
         shown = (
@@ -109,10 +117,17 @@ class ConnectTest(unittest.TestCase):
                 raise NmcliError("Secrets were required, but not provided")
             return ""
 
-        with patch("outils.nmcli.run", side_effect=run), patch("outils.nmcli.saved_networks", return_value={"Cafe": "new"}):
+        with patch("outils.nmcli.run", side_effect=run), patch("outils.nmcli.saved_networks", side_effect=[[], [Profile("Cafe", "new")]]):
             with self.assertRaisesRegex(NmcliError, "Secrets"):
                 nmcli.connect(network("Cafe"), "wrong")
         self.assertEqual(calls[-1], ("connection", "delete", "uuid", "new"))
+
+        # A profile saved before the attempt, which a stale list did not show, keeps its password
+        calls.clear()
+        with patch("outils.nmcli.run", side_effect=run), patch("outils.nmcli.saved_networks", return_value=[Profile("Cafe", "old")]):
+            with self.assertRaisesRegex(NmcliError, "Secrets"):
+                nmcli.connect(network("Cafe"), "wrong")
+        self.assertNotIn("delete", [arg for args in calls for arg in args])
 
     def test_radio_and_connectivity_calls(self):
         with patch("outils.nmcli.run", return_value="portal\n") as run:

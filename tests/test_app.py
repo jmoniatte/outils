@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,7 +15,7 @@ from outils.ipinfo import IpInfoError
 from outils.nmcli import Scan
 from outils.pactl import SINK, Device, Mixer
 from outils.weather import WeatherError
-from outils.widgets import CalendarView
+from outils.widgets import CalendarView, WeatherView
 
 
 SPEAKERS = Device(SINK, 1, "laptop", "Laptop speakers", 80, False, default=True)
@@ -40,7 +41,7 @@ class AppTest(unittest.TestCase):
         async def main():
             with (
                 tempfile.TemporaryDirectory() as tmp,
-                patch("outils.app.CONFIG_FILE", Path(tmp) / "config.yaml"),
+                patch("outils.app.CONFIG_FILE", Path(tmp) / "config.yaml") as self.config_file,
                 # The modes that ask a service get no answer: the tests never reach the network
                 patch("outils.widgets.weather_view.forecast", side_effect=WeatherError("offline")) as self.forecast,
                 patch("outils.widgets.ip_view.fetch", side_effect=IpInfoError("offline")) as self.fetch,
@@ -159,6 +160,14 @@ class AppTest(unittest.TestCase):
 
         self.run_app(body)
 
+    def test_the_footnote_follows_a_new_day(self):
+        async def body(app, pilot):
+            app.query_one(CalendarView).set_today(date(2027, 1, 1))
+            await pilot.pause()
+            self.assertEqual(str(app.query_one("#mode-credit-text").render()), "Friday, January 1, 2027")
+
+        self.run_app(body)
+
     def test_a_click_on_a_tab_shows_its_mode(self):
         async def body(app, pilot):
             tabs = app.query_one("#modes", TabbedContent)
@@ -202,6 +211,16 @@ class AppTest(unittest.TestCase):
             await pilot.press("escape", "t")
             await pilot.pause()
             self.assertIsInstance(app.screen, ThemePicker)
+
+        self.run_app(body)
+
+    def test_units_that_cannot_be_saved_are_a_warning_and_the_config_is_left_alone(self):
+        async def body(app, pilot):
+            self.config_file.write_text("{theme: nord}\n")
+            app.on_weather_view_units_changed(WeatherView.UnitsChanged("imperial"))
+            await pilot.pause()
+            self.assertIn("units: not saved", app.query_one(FooterMessage).render().plain)
+            self.assertEqual(self.config_file.read_text(), "{theme: nord}\n")
 
         self.run_app(body)
 

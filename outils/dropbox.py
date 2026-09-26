@@ -64,13 +64,20 @@ def folder(info_file: Path = INFO_FILE) -> Path:
 def _run(*args: str) -> str:
     # Through tui-kit, so quitting kills a call still waiting; a missing command raises FileNotFoundError
     try:
-        return processes.run([COMMAND, *args], TIMEOUT).stdout.strip()
+        result = processes.run([COMMAND, *args], TIMEOUT)
     except subprocess.TimeoutExpired:
         raise DropboxError(f"dropbox {' '.join(args)} did not answer") from None
+    if result.returncode:
+        # stderr holds a DeprecationWarning even on success, and a traceback's last line says what went wrong
+        said = result.stderr.strip() or result.stdout.strip() or f"dropbox {' '.join(args)} failed"
+        raise DropboxError(said.splitlines()[-1])
+    return result.stdout.strip()
 
 
 def status() -> str | None:
-    """What the client says it is doing, a line or more; None when the dropbox command is missing."""
+    """What the client says it is doing, a line or more; None when the dropbox command is missing.
+
+    A stopped client is no error: the command says "Dropbox isn't running!" and exits 0."""
     try:
         return _run("status")
     except FileNotFoundError:
@@ -107,11 +114,16 @@ async def start() -> None:
         start_new_session=True,
     )
 
-    async def exited() -> bool:
-        return process.poll() is not None
+    # dropbox start exits 0 even when the daemon did not start, so only status tells
+    async def started() -> bool:
+        if process.poll() is None:
+            return False
+        if process.returncode:
+            raise DropboxError(f"dropbox start failed with exit status {process.returncode}")
+        return state(await asyncio.to_thread(status)) == RUNNING
 
     try:
-        await _wait_until(exited, START_TIMEOUT, "Dropbox did not start")
+        await _wait_until(started, START_TIMEOUT, "Dropbox did not start")
     except DropboxError:
         process.kill()
         raise

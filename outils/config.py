@@ -1,4 +1,3 @@
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,7 +11,6 @@ from .months import WEEKDAY_NAMES
 from .weather import METRIC, UNITS
 
 CONFIG_FILE = Path.home() / ".config" / "outils" / "config.yaml"
-_UNITS_LINE = re.compile(r"^units:.*$", re.MULTILINE)
 
 
 @dataclass
@@ -58,15 +56,44 @@ def load_config(path: Path = CONFIG_FILE) -> Config:
     return config
 
 
-def save_units(units: str, path: Path = CONFIG_FILE) -> None:
-    """Persist the units, leaving the rest of a hand-written config untouched."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    line = f"units: {units}"
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    updated, replaced = _UNITS_LINE.subn(line, text, count=1)
-    if not replaced:
-        updated = f"{text.rstrip()}\n{line}\n" if text.strip() else f"{line}\n"
-    path.write_text(updated, encoding="utf-8")
+def save_units(units: str, path: Path = CONFIG_FILE) -> str | None:
+    """Persist the units, leaving the rest of a hand-written config as it was; a warning when it cannot."""
+    try:
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        updated = _with_value(text, "units", units)
+        # Through a link, the file it points at (the config may live in a dotfiles repository)
+        target = path.resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Written aside, then moved over the config, so a crash never leaves it half written
+        temporary = target.with_name(f".{target.name}.tmp")
+        temporary.write_text(updated, encoding="utf-8")
+        temporary.replace(target)
+    except yaml.YAMLError:
+        return f"units: not saved, {path} is not valid YAML"
+    except (OSError, ValueError) as error:
+        return f"units: not saved to {path}: {error}"
+    return None
+
+
+def _with_value(text: str, key: str, value: str) -> str:
+    """text with key's value replaced, or key added at the end; ValueError unless the YAML reads back the same but for it."""
+    root = yaml.compose(text)
+    mapping = isinstance(root, yaml.MappingNode)
+    # The last one, as yaml reads it when a key is given twice
+    pair = next((pair for pair in reversed(root.value) if pair[0].value == key), None) if mapping else None
+    if pair:
+        start, end = pair[1].start_mark.index, pair[1].end_mark.index
+        # A block scalar's span ends with its line breaks, which the next key needs
+        old = text[start:end]
+        updated = text[:start] + value + old[len(old.rstrip()):] + text[end:]
+    elif root is None or (mapping and not root.flow_style):
+        updated = f"{text.rstrip()}\n{key}: {value}\n" if text.strip() else f"{key}: {value}\n"
+    else:
+        raise ValueError("the file is not a mapping written one key per line")
+    before = yaml.safe_load(text) or {}
+    if yaml.safe_load(updated) != {**before, key: value}:
+        raise ValueError("the file is written in a way outils cannot change safely")
+    return updated
 
 
 def _clocks(zones: Mapping[str, str]) -> list[Clock]:

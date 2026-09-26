@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import tempfile
 import unittest
 from dataclasses import replace
@@ -138,6 +139,35 @@ class SoundTest(unittest.TestCase):
                 self.assertEqual(footer_message(app), "")
 
         self.run_app(body)
+
+    def test_a_slow_reload_is_not_restarted_by_the_timer_and_only_what_follows_a_change_shows(self):
+        async def body(app, pilot, mocks):
+            view = app.query_one(SoundView)
+            gate = threading.Event()
+            answers = [MIXER]
+
+            def slow_mixer():
+                # What pactl says when asked, handed back once the gate opens
+                answer = answers[-1]
+                gate.wait(5)
+                return answer
+
+            with patch("outils.pactl.mixer", side_effect=slow_mixer) as mixer, patch.object(view, "show", wraps=view.show) as show:
+                await pilot.pause(0.5)
+                # Ticks while pactl is slow do not ask it again
+                self.assertEqual(mixer.call_count, 1)
+                view.timer.pause()
+                answers.append(Mixer(outputs=[replace(LAPTOP, volume=30), MONITOR], inputs=[MIC]))
+                view.load_mixer()
+                gate.set()
+                await settle(app, pilot)
+                self.assertEqual(mixer.call_count, 2)
+                # The answer from before the change is never shown, only the one after it
+                self.assertEqual(show.await_count, 1)
+                self.assertEqual(text(app, LAPTOP)[1], "30%")
+
+        with patch("outils.widgets.sound_view.REFRESH_SECONDS", 0.05):
+            self.run_app(body)
 
     def test_opens_on_the_output_in_use_and_no_microphone_hides_its_section(self):
         async def body(app, pilot, mocks):

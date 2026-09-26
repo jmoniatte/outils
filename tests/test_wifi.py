@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -126,6 +127,39 @@ class WifiTest(unittest.TestCase):
 
         self.run_app(body, connect=connect)
 
+    def test_cancel_closes_the_password_dialog_but_the_connect_holds_until_nmcli_ends(self):
+        release = threading.Event()
+
+        def connect(network, password=""):
+            release.wait(5)
+
+        async def body(app, pilot, mocks):
+            view = app.query_one(WifiView)
+            await pilot.press("j", "enter")
+            await pilot.pause()
+            await pilot.press(*"pw", "enter")
+            await pilot.pause()
+            self.assertEqual(view.connecting, "Cafe")
+
+            await pilot.press("escape")
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, PasswordScreen)
+            self.assertEqual((view.connecting, status(app)), ("Cafe", "Connecting to Cafe..."))
+
+            # nmcli cannot be stopped midway, so nothing else may change the connection until it ends
+            nearby_table(app).move_cursor(row=2)
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertEqual(footer_message(app), "Still connecting to Cafe")
+
+            release.set()
+            await settle(app, pilot)
+            self.assertIsNone(view.connecting)
+            self.assertEqual(footer_message(app), "Connected to Cafe")
+            mocks["connect"].assert_called_once_with(CAFE, "pw")
+
+        self.run_app(body, connect=connect)
+
     def test_a_saved_network_connects_on_click_without_asking(self):
         async def body(app, pilot, mocks):
             table = nearby_table(app)
@@ -133,7 +167,7 @@ class WifiTest(unittest.TestCase):
             await settle(app, pilot)
             self.assertEqual(table.cursor_row, 2)
             self.assertNotIsInstance(app.screen, PasswordScreen)
-            mocks["connect"].assert_called_once_with(WORK)
+            mocks["connect"].assert_called_once_with(WORK, "")
             self.assertEqual(footer_message(app), "Connected to Work")
 
         self.run_app(body)
@@ -232,6 +266,29 @@ class WifiTest(unittest.TestCase):
             self.assertTrue(nearby_table(app).has_focus)
 
         self.run_app(body)
+
+    def test_two_profiles_for_one_network_are_two_saved_rows(self):
+        home_too = Network("Home", signal=70, security="WPA3", frequency=6295, saved_uuid="u4")
+
+        async def body(app, pilot, mocks):
+            await pilot.press("right")
+            await pilot.pause()
+            saved = app.query_one("#saved-table", NetworksTable)
+            self.assertEqual(saved.row_count, 4)
+            saved.move_cursor(row=1)
+            await pilot.press("enter")
+            await settle(app, pilot)
+            mocks["share"].assert_called_once_with("u4")
+            await pilot.press("escape")
+            await pilot.pause()
+
+            await pilot.press("f")
+            await pilot.pause()
+            await pilot.click("#confirm-btn")
+            await settle(app, pilot)
+            mocks["forget"].assert_called_once_with(home_too)
+
+        self.run_app(body, scan=Scan(nearby=[HOME, CAFE, WORK, OFFICE], saved=[HOME, home_too, WORK, OLD]))
 
     def test_details_show_the_password_and_qr_code_only_when_asked(self):
         async def body(app, pilot, mocks):

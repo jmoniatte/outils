@@ -70,6 +70,18 @@ class FindPlaceTest(unittest.TestCase):
             with self.assertRaisesRegex(WeatherError, "does not know 'Nowhere'"):
                 find_place("Nowhere", Path(tmp) / "places.json")
 
+    def test_a_bad_cache_entry_is_asked_again_and_a_bad_answer_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.ask", return_value={"results": RESULTS}) as get:
+            cache = Path(tmp) / "places.json"
+            for entry in ({"name": "Victoria"}, ["Victoria"], "Victoria"):
+                cache.write_text(json.dumps({"Victoria, BC": entry}))
+                self.assertEqual(find_place("Victoria, BC", cache), PLACE)
+            self.assertEqual(get.call_count, 3)
+        for answer in ([], {"results": [{"name": "Victoria"}]}, {"results": ["Victoria"]}):
+            with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.ask", return_value=answer):
+                with self.assertRaisesRegex(WeatherError, "answer outils cannot read"):
+                    find_place("Victoria, BC", Path(tmp) / "places.json")
+
 
 class ForecastTest(unittest.TestCase):
     def test_parse_forecast_reads_now_and_every_day(self):
@@ -92,6 +104,19 @@ class ForecastTest(unittest.TestCase):
         ):
             with patch("outils.web.urlopen", **failure), self.assertRaisesRegex(WeatherError, message):
                 weather.ask(weather.FORECAST_URL, {})
+
+    def test_a_forecast_of_another_shape_is_an_error(self):
+        daily = FORECAST["daily"]
+        for answer in (
+            [],
+            {"current": FORECAST["current"]},
+            {**FORECAST, "current": {**FORECAST["current"], "temperature_2m": None}},
+            {**FORECAST, "daily": {**daily, "weather_code": [61]}},
+            {**FORECAST, "daily": {**daily, "time": ["2026-09-24", "tomorrow"]}},
+        ):
+            with patch("outils.weather.find_place", return_value=PLACE), patch("outils.weather.ask", return_value=answer):
+                with self.assertRaisesRegex(WeatherError, "answer outils cannot read"):
+                    weather.forecast("Victoria, BC")
 
     def test_describe_names_the_code_and_gives_the_moon_on_a_clear_night(self):
         self.assertEqual(describe(63)[0], "Rain")

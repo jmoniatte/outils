@@ -179,8 +179,13 @@ class OutilsApp(BaseApp):
             if hasattr(view, "set_colors"):
                 view.set_colors()
 
+    def on_footnote_changed(self) -> None:
+        self._show_credit(self.shown_view)
+
     def on_weather_view_units_changed(self, event: WeatherView.UnitsChanged) -> None:
-        save_units(event.units, CONFIG_FILE)
+        warning = save_units(event.units, CONFIG_FILE)
+        if warning:
+            self.notify(warning, severity="warning", timeout=10)
 
     def action_next_mode(self) -> None:
         if len(self.screen_stack) > 1:

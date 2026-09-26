@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from rich.style import Style
@@ -33,6 +34,7 @@ from ..dropbox import (
     stop,
 )
 from ..epoch import relative
+from ..reload import Reload
 
 # Seconds between two looks at the client and the folder, while the tab shows
 POLL = 2
@@ -61,6 +63,7 @@ class DropboxView(Vertical, can_focus=True):
         self.root = root or folder()
         # While dropbox start or stop runs
         self.busy = False
+        self._reload = Reload(self._poll)
 
     def compose(self) -> ComposeResult:
         # Over the list: what it holds on the left, the button on the right
@@ -79,7 +82,7 @@ class DropboxView(Vertical, can_focus=True):
             yield RecentFiles()
 
     def on_mount(self) -> None:
-        self.timer = self.set_interval(POLL, self.poll, pause=True)
+        self.timer = self.set_interval(POLL, partial(self.poll, tick=True), pause=True)
 
     def on_show(self) -> None:
         self.poll()
@@ -88,14 +91,19 @@ class DropboxView(Vertical, can_focus=True):
     def on_hide(self) -> None:
         self.timer.pause()
 
-    @work(exclusive=True, group="poll")
-    async def poll(self) -> None:
+    @work(group="poll")
+    async def poll(self, tick: bool = False) -> None:
+        await self._reload.run(tick)
+
+    async def _poll(self) -> None:
         try:
             current = state(await asyncio.to_thread(status))
         except DropboxError:
-            # Too busy to answer, so running
+            # Too busy to answer, or failing: shown as running, so Stop stays in reach
             current = RUNNING
         files = await asyncio.to_thread(recent, self.root)
+        if self._reload.overtaken:
+            return
         self.show_state(current)
         self.query_one(RecentFiles).show(files, f"No files in {self.root}")
 

@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 from outils.config import Config
 from outils.widgets import CalendarView, MonthView
@@ -91,6 +92,35 @@ class CalendarViewTest(unittest.TestCase):
             await pilot.pause()
             self.assertEqual(view.months(), [(2025, 12), (2026, 1)])
             self.assertEqual(lines(months[1])[0], "        January 2026")
+
+        self.run_view(body)
+
+    def test_a_new_day_moves_today_and_follows_it_to_a_new_month_unless_another_was_picked(self):
+        async def body(app, pilot):
+            view = app.view
+            view.set_today(date(2026, 9, 25))
+            await pilot.pause()
+            months = list(app.query(MonthView))
+            self.assertEqual([spans(m, "today") for m in months], [[" 25 "], []])
+            self.assertEqual(view.footnote, "Friday, September 25, 2026")
+            # Today's month in focus follows today into the next one
+            view.set_today(date(2026, 10, 1))
+            await pilot.pause()
+            self.assertEqual(view.months(), [(2026, 10), (2026, 11)])
+            self.assertEqual([spans(m, "today") for m in months], [["  1 "], []])
+            self.assertEqual([title_kind(m) for m in months], ["title-current", "title"])
+            # A month picked by hand stays, with today redrawn
+            view.action_shift(-2)
+            view.set_today(date(2026, 11, 1))
+            await pilot.pause()
+            self.assertEqual(view.months(), [(2026, 8), (2026, 9)])
+            self.assertEqual([title_kind(m) for m in months], ["title-past", "title-past"])
+            self.assertTrue(app.query_one("#btn-today").visible)
+            # Showing the tab reads the date again
+            with patch("outils.widgets.calendar_view.date") as clock:
+                clock.today.return_value = date(2026, 11, 2)
+                view.tab_shown()
+            self.assertEqual(view.today, date(2026, 11, 2))
 
         self.run_view(body)
 

@@ -45,7 +45,11 @@ def signal_text(signal: int, colors: NetworkColors) -> Text:
 
 
 class NetworksTable(DataTable):
-    """A list of networks; rows are keyed by SSID and the one in use is drawn in the current color."""
+    """A list of networks, the one in use drawn in the current color.
+
+    key names the Network field that tells rows apart: ssid on Nearby, saved_uuid on Saved,
+    where two profiles can share an SSID.
+    """
 
     BINDINGS = [
         Binding("enter", "select_cursor", "Connect", show=False, group=ACTIONS),
@@ -59,9 +63,10 @@ class NetworksTable(DataTable):
     class SwitchList(Message):
         """The user asked for the other list, Nearby or Saved."""
 
-    def __init__(self, colors: NetworkColors, **kwargs) -> None:
+    def __init__(self, colors: NetworkColors, key: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self._colors = colors
+        self.key = key
         self.networks: list[Network] = []
 
     def on_mount(self) -> None:
@@ -78,11 +83,11 @@ class NetworksTable(DataTable):
         selected = self.selected_network()
         self.networks = networks
         self.clear()
-        for network in networks:
-            self.add_row(*self._cells(network), key=network.ssid)
-        ssids = [network.ssid for network in networks]
-        if selected is not None and selected.ssid in ssids:
-            self.move_cursor(row=ssids.index(selected.ssid), animate=False)
+        keys = [getattr(network, self.key) for network in networks]
+        for network, key in zip(networks, keys):
+            self.add_row(*self._cells(network), key=key)
+        if selected is not None and getattr(selected, self.key) in keys:
+            self.move_cursor(row=keys.index(getattr(selected, self.key)), animate=False)
         self._repaint(self.cursor_row)
 
     def watch_cursor_coordinate(self, old_coordinate: Coordinate, new_coordinate: Coordinate) -> None:
@@ -98,7 +103,7 @@ class NetworksTable(DataTable):
             return
         network = self.networks[row]
         for (key, _), cell in zip(COLUMNS, self._cells(network, highlighted=row == self.cursor_row)):
-            self.update_cell(network.ssid, key, cell)
+            self.update_cell(getattr(network, self.key), key, cell)
 
     def selected_network(self) -> Network | None:
         """The highlighted network, or None while the list is empty."""

@@ -3,7 +3,7 @@
 Every call blocks until nmcli exits; the app runs them with asyncio.to_thread.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from . import command
 
@@ -26,7 +26,7 @@ class Network:
     security: str
     frequency: int
     in_use: bool = False
-    # The saved profile for this SSID, or "" when there is none
+    # The saved profile it connects through, or "" when there is none; see parse_scan when there are several
     saved_uuid: str = ""
     # False for a saved profile whose network is not around; signal, security and band are then unknown
     in_range: bool = True
@@ -47,6 +47,14 @@ class Network:
     @property
     def band(self) -> str:
         return band_name(self.frequency)
+
+
+@dataclass(frozen=True, slots=True)
+class Profile:
+    """A saved Wi-Fi profile; several can share an SSID, and its name need not be the SSID."""
+
+    ssid: str
+    uuid: str
 
 
 def run(*args: str, stdin: str | None = None, timeout: float = 30) -> str:
@@ -91,12 +99,16 @@ def _rows(fields: str, *args: str) -> list[list[str]]:
     return terse_rows(run("-t", "-f", fields, *args), fields.count(",") + 1)
 
 
-def parse_scan(output: str, saved: dict[str, str]) -> list[Network]:
+def parse_scan(output: str, profiles: list[Profile]) -> list[Network]:
     """One Network per SSID, the one in use first, then by signal.
 
     A merged row takes its signal and band from the access point in use, else the strongest.
-    Hidden networks (no SSID) are left out.
+    Hidden networks (no SSID) are left out. An SSID with several profiles gets the most recently
+    used, the one in use if any, since NetworkManager stamps a profile when it comes up.
     """
+    saved: dict[str, str] = {}
+    for profile in profiles:
+        saved.setdefault(profile.ssid, profile.uuid)
     best: dict[str, Network] = {}
     for in_use, ssid, frequency, signal, security in terse_rows(output, 5):
         if not ssid:
@@ -132,36 +144,45 @@ def _security(text: str) -> str:
     return "" if text == "--" else text
 
 
-def saved_networks() -> dict[str, str]:
-    """SSID -> UUID of every saved Wi-Fi profile; a profile's name need not be its SSID."""
+def saved_networks() -> list[Profile]:
+    """Every saved Wi-Fi profile, the most recently used first."""
     uuids = [uuid for uuid, kind in _rows("UUID,TYPE", "connection", "show") if kind == WIFI_TYPE]
     if not uuids:
-        return {}
-    output = run("-t", "-f", "connection.uuid,802-11-wireless.ssid", "connection", "show", *uuids)
+        return []
+    output = run("-t", "-f", "connection.uuid,connection.timestamp,802-11-wireless.ssid", "connection", "show", *uuids)
     return parse_profiles(output)
 
 
-def parse_profiles(output: str) -> dict[str, str]:
+def parse_profiles(output: str) -> list[Profile]:
     """Read `connection show` of several profiles: blocks of field:value lines, one block per profile."""
-    ssids: dict[str, str] = {}
-    uuid = ""
+    blocks: list[dict[str, str]] = []
     for line in output.splitlines():
         key, _, value = line.partition(":")
         if key == "connection.uuid":
-            uuid = value
-        elif key == "802-11-wireless.ssid" and uuid and value:
-            ssids.setdefault(value, uuid)
-    return ssids
+            blocks.append({})
+        if blocks:
+            blocks[-1][key] = value
+    blocks.sort(key=lambda block: -_number(block.get("connection.timestamp", "")))
+    return [
+        Profile(block["802-11-wireless.ssid"], block["connection.uuid"])
+        for block in blocks
+        if block.get("802-11-wireless.ssid")
+    ]
 
 
-def saved_list(nearby: list[Network], saved: dict[str, str]) -> list[Network]:
-    """Every saved profile: the ones in range as the scan saw them, then the others by name."""
-    in_range = [network for network in nearby if network.saved]
-    seen = {network.ssid for network in in_range}
+def saved_list(nearby: list[Network], profiles: list[Profile]) -> list[Network]:
+    """One row per saved profile: the ones in range as the scan saw them, then the others by name."""
+    in_range = [
+        replace(network, saved_uuid=profile.uuid, in_use=network.in_use and profile.uuid == network.saved_uuid)
+        for network in nearby
+        for profile in profiles
+        if profile.ssid == network.ssid
+    ]
+    seen = {network.ssid for network in nearby}
     away = [
-        Network(ssid, signal=0, security="", frequency=0, saved_uuid=uuid, in_range=False)
-        for ssid, uuid in sorted(saved.items(), key=lambda item: item[0].lower())
-        if ssid not in seen
+        Network(profile.ssid, signal=0, security="", frequency=0, saved_uuid=profile.uuid, in_range=False)
+        for profile in sorted(profiles, key=lambda profile: profile.ssid.lower())
+        if profile.ssid not in seen
     ]
     return in_range + away
 
@@ -201,26 +222,31 @@ def connect(network: Network, password: str = "") -> None:
     """Join a network: through its saved profile, or with the password, which nmcli reads on stdin.
 
     The password never goes on the command line, where `ps` would show it. When the password is
-    wrong, the profile nmcli created for it is deleted so the next try asks again.
+    wrong, the profile nmcli created for it is deleted so the next try asks again; one saved
+    before, which a stale list did not show, is kept.
     """
     wait = str(CONNECT_TIMEOUT)
     if network.saved:
         run("--wait", wait, "connection", "up", "uuid", network.saved_uuid, timeout=CONNECT_TIMEOUT + 10)
         return
+    before = _profile_uuids(network.ssid)
     try:
         run(
             "--ask", "--wait", wait, "device", "wifi", "connect", network.ssid,
             stdin=f"{password}\n", timeout=CONNECT_TIMEOUT + 10,
         )
     except NmcliError:
-        _forget_new_profile(network.ssid)
+        _forget_new_profiles(network.ssid, before)
         raise
 
 
-def _forget_new_profile(ssid: str) -> None:
+def _profile_uuids(ssid: str) -> set[str]:
+    return {profile.uuid for profile in saved_networks() if profile.ssid == ssid}
+
+
+def _forget_new_profiles(ssid: str, before: set[str]) -> None:
     try:
-        uuid = saved_networks().get(ssid)
-        if uuid:
+        for uuid in _profile_uuids(ssid) - before:
             run("connection", "delete", "uuid", uuid)
     except NmcliError:
         pass  # The connect error is the one worth showing

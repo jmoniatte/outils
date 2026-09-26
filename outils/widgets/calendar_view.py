@@ -4,6 +4,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.widgets import Button, Static
 from tui_kit.shortcuts import ACTIONS
 
@@ -13,10 +14,15 @@ from ..months import shift_month
 from .month_view import MonthView
 
 
+class FootnoteChanged(Message):
+    """The view's footnote says something new; the app shows it again."""
+
+
 class CalendarView(Vertical, can_focus=True):
     """Several months side by side, the one in focus first, under Previous, Today and Next.
 
-    before and after say how many months flank the one in focus. It starts on today's month.
+    before and after say how many months flank the one in focus. It starts on today's month, and
+    follows today into the next month when it was on show.
     """
 
     BINDINGS = [
@@ -48,6 +54,20 @@ class CalendarView(Vertical, can_focus=True):
 
     def on_mount(self) -> None:
         self._update_today_button()
+        # outils stays open for days, so a new day must reach the calendar without a restart
+        self.set_interval(60, self.tab_shown)
+
+    def tab_shown(self) -> None:
+        self.set_today(date.today())
+
+    def set_today(self, today: date) -> None:
+        """Move today there, taking the month in focus along if it was today's."""
+        if today == self.today:
+            return
+        followed = (self.year, self.month) == (self.today.year, self.today.month)
+        self.today = today
+        self.show_month(*((today.year, today.month) if followed else (self.year, self.month)))
+        self.post_message(FootnoteChanged())
 
     @property
     def footnote(self) -> str:
@@ -62,7 +82,7 @@ class CalendarView(Vertical, can_focus=True):
         """Put that month in focus, and its neighbours around it."""
         self.year, self.month = year, month
         for view, (shown_year, shown_month) in zip(self.query(MonthView), self.months()):
-            view.show(shown_year, shown_month)
+            view.show(shown_year, shown_month, self.today)
         self._update_today_button()
 
     def action_shift(self, delta: int) -> None:

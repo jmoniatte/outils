@@ -72,6 +72,11 @@ class WeatherError(Exception):
     """Open-Meteo could not be reached, or did not know the place; the message says which."""
 
 
+# What reading an answer, or a cache entry, of another shape than expected raises
+_UNREADABLE = (AttributeError, IndexError, KeyError, TypeError, ValueError)
+_UNREADABLE_MESSAGE = "Open-Meteo gave an answer outils cannot read"
+
+
 @dataclass(frozen=True, slots=True)
 class Place:
     name: str
@@ -188,10 +193,16 @@ def find_place(location: str, cache_file: Path = CACHE_FILE) -> Place:
     """The place a config's location names, looked up once and then read from the cache."""
     cache = _read_cache(cache_file)
     if location in cache:
-        return Place(**cache[location])
+        try:
+            return Place(**cache[location])
+        except TypeError:
+            pass  # An entry of another shape is asked again, and replaced
     name = location.partition(",")[0].strip()
     data = ask(GEOCODING_URL, {"name": name, "count": 10, "language": "en", "format": "json"})
-    place = pick_place(location, data.get("results") or [])
+    try:
+        place = pick_place(location, data.get("results") or [])
+    except _UNREADABLE:
+        raise WeatherError(_UNREADABLE_MESSAGE) from None
     if place is None:
         raise WeatherError(f"Open-Meteo does not know {location!r}")
     cache[location] = asdict(place)
@@ -213,24 +224,25 @@ def _read_cache(cache_file: Path) -> dict:
 
 def parse_forecast(place: Place, units: str, data: dict) -> Forecast:
     now = data["current"]
+    # float() and int() also turn a missing value (null) into an error here, not when drawn
     current = Current(
-        temperature=now["temperature_2m"],
-        feels_like=now["apparent_temperature"],
-        humidity=now["relative_humidity_2m"],
-        precipitation=now["precipitation"],
-        wind=now["wind_speed_10m"],
-        code=now["weather_code"],
+        temperature=float(now["temperature_2m"]),
+        feels_like=float(now["apparent_temperature"]),
+        humidity=int(now["relative_humidity_2m"]),
+        precipitation=float(now["precipitation"]),
+        wind=float(now["wind_speed_10m"]),
+        code=int(now["weather_code"]),
         is_day=bool(now.get("is_day", 1)),
     )
     daily = data["daily"]
     days = [
         Day(
             day=date.fromisoformat(daily["time"][i]),
-            code=daily["weather_code"][i],
-            high=daily["temperature_2m_max"][i],
-            low=daily["temperature_2m_min"][i],
+            code=int(daily["weather_code"][i]),
+            high=float(daily["temperature_2m_max"][i]),
+            low=float(daily["temperature_2m_min"][i]),
             rain_chance=daily["precipitation_probability_max"][i],
-            precipitation=daily["precipitation_sum"][i],
+            precipitation=float(daily["precipitation_sum"][i]),
         )
         for i in range(len(daily["time"]))
     ]
@@ -249,4 +261,8 @@ def forecast(location: str, units: str = METRIC) -> Forecast:
         "forecast_days": DAYS,
         **_UNIT_PARAMS[units],
     }
-    return parse_forecast(place, units, ask(FORECAST_URL, params))
+    data = ask(FORECAST_URL, params)
+    try:
+        return parse_forecast(place, units, data)
+    except _UNREADABLE:
+        raise WeatherError(_UNREADABLE_MESSAGE) from None

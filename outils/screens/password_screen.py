@@ -1,28 +1,29 @@
-import asyncio
+from collections.abc import Callable
 
-from textual import on, work
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static
 
-from .. import nmcli
-from ..nmcli import Network, NmcliError
+from ..nmcli import Network
 
 
-class PasswordScreen(ModalScreen[bool]):
-    """Ask for a network's password and connect with it; stays open on a wrong password so it can be typed again.
+class PasswordScreen(ModalScreen[None]):
+    """Ask for a network's password; stays open on a wrong password so it can be typed again.
 
-    Returns True once connected, False when cancelled.
+    submit(network, password, dialog) runs the connect, which Cancel leaves running: nmcli cannot
+    be stopped midway. It calls failed() or dismisses the dialog while it is still open.
     """
 
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
     ]
 
-    def __init__(self, network: Network) -> None:
+    def __init__(self, network: Network, submit: Callable[[Network, str, "PasswordScreen"], None]) -> None:
         super().__init__()
         self.network = network
+        self.submit = submit
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -47,23 +48,16 @@ class PasswordScreen(ModalScreen[bool]):
             self._show_error("Enter the password")
             return
         self._set_busy(True)
-        self._connect(password)
+        self.submit(self.network, password, self)
 
     @on(Button.Pressed, "#cancel-btn")
     def action_cancel(self) -> None:
-        self.workers.cancel_node(self)
-        self.dismiss(False)
+        self.dismiss()
 
-    @work(exclusive=True)
-    async def _connect(self, password: str) -> None:
-        try:
-            await asyncio.to_thread(nmcli.connect, self.network, password)
-        except NmcliError as error:
-            self._set_busy(False)
-            self._show_error(str(error))
-            self.query_one("#password", Input).focus()
-            return
-        self.dismiss(True)
+    def failed(self, message: str) -> None:
+        self._set_busy(False)
+        self._show_error(message)
+        self.query_one("#password", Input).focus()
 
     def _set_busy(self, busy: bool) -> None:
         self.query_one("#connect-btn", Button).disabled = busy

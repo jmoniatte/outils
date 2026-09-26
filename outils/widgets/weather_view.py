@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date
+from time import time
 
 from rich.text import Text
 from textual import on, work
@@ -21,6 +21,8 @@ DAY_LABEL = 12
 DESCRIPTION = 22
 # Between the numbers' columns
 GAP = " " * 5
+# Seconds a forecast stays on show before the tab, shown again, asks for a new one
+MAX_AGE = 60 * 60
 
 
 class WeatherView(Vertical):
@@ -43,18 +45,19 @@ class WeatherView(Vertical):
     # data is CC BY 4.0, which asks for it
     CREDIT = ("Data by", "https://open-meteo.com")
 
-    def __init__(self, config: Config, today: date | None = None) -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__(id="weather")
         self.config = config
-        self.today = today
         # What was last asked for, so a change of units asks for it again; empty until the tab shows
         self.location = ""
+        # When the forecast on show came; wall time, since a night's suspend must count
+        self.loaded_at = 0.0
 
     def compose(self) -> ComposeResult:
         buttons = [quick_button(label, f"units-{units}") for units, label in ((METRIC, "°C"), (IMPERIAL, "°F"))]
         box = LookupBox(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
         yield lookup_row("City", box, Horizontal(*buttons, id="weather-units"))
-        yield ForecastView(self.today)
+        yield ForecastView()
 
     def on_mount(self) -> None:
         self._show_units()
@@ -77,9 +80,9 @@ class WeatherView(Vertical):
         self.post_message(self.UnitsChanged(units))
 
     def on_show(self) -> None:
-        # Asked the first time its tab shows, so opening another tab costs no request
-        if not self.location:
-            self.load(self.config.location)
+        # Asked the first time its tab shows, so opening another tab costs no request, then again once old
+        if time() - self.loaded_at > MAX_AGE:
+            self.load(self.location or self.config.location)
 
     @on(Input.Submitted, "#weather-city")
     def _city_submitted(self, event: Input.Submitted) -> None:
@@ -101,6 +104,7 @@ class WeatherView(Vertical):
             view.show(None, str(error))
             self.app.notify(str(error), severity="error", timeout=10)
             return
+        self.loaded_at = time()
         self.query_one(LookupBox).show_found(found.place.label)
         view.show(found)
 
@@ -119,9 +123,8 @@ class ForecastView(Widget):
         "weather--rain",
     }
 
-    def __init__(self, today: date | None = None) -> None:
+    def __init__(self) -> None:
         super().__init__(id="forecast")
-        self.today = today or date.today()
         self.forecast: Forecast | None = None
         # Shown, dim, while there is no forecast: that it is coming, or why it did not
         self.message = ""
@@ -152,10 +155,10 @@ class ForecastView(Widget):
         ]
         text.append("\n    " + "  ·  ".join(details), style=self._style("dim"))
         text.append("\n")
-        for day in self.forecast.days:
+        # The first day is today where the place is; a week never repeats a day name, so the name alone is enough
+        for index, day in enumerate(self.forecast.days):
             words, icon = describe(day.code)
-            # A week from today never repeats a day name, so the name alone is enough
-            label = "Today" if day.day == self.today else f"{day.day:%A}"
+            label = f"{day.day:%A}" if index else "Today"
             text.append(f"\n{label:<{DAY_LABEL}}{icon}   {words:<{DESCRIPTION}}")
             text.append(f"{round(day.high):>3}°", style=self._style("high"))
             text.append(" / ", style=self._style("dim"))

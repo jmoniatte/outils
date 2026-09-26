@@ -52,6 +52,32 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(self.path.read_text(), "theme: nord\nunits: metric\n")
         self.assertEqual(load_config(self.path).units, "metric")
 
+    def test_save_units_keeps_any_valid_yaml_valid_and_warns_when_it_cannot(self) -> None:
+        self.path.parent.mkdir()
+        for before, after in (
+            ("{theme: nord, units: metric}\n", "{theme: nord, units: imperial}\n"),
+            ("units: >-\n  metric\ntheme: nord\n", "units: imperial\ntheme: nord\n"),
+            ("# only a comment\n", "# only a comment\nunits: imperial\n"),
+        ):
+            self.path.write_text(before)
+            self.assertIsNone(save_units("imperial", self.path))
+            self.assertEqual(self.path.read_text(), after)
+            self.assertEqual(load_config(self.path).units, "imperial")
+        # No units to replace and nowhere safe to add them: the file is left as it was
+        for text in ("{theme: nord}\n", "- a list\n", "theme: [unclosed\n"):
+            self.path.write_text(text)
+            self.assertIn("units", save_units("imperial", self.path))
+            self.assertEqual(self.path.read_text(), text)
+
+    def test_save_units_writes_through_a_link_to_the_file_it_points_at(self) -> None:
+        self.path.parent.mkdir()
+        target = self.path.with_name("dotfiles.yaml")
+        target.write_text("units: metric\n")
+        self.path.symlink_to(target)
+        save_units("imperial", self.path)
+        self.assertTrue(self.path.is_symlink())
+        self.assertEqual(target.read_text(), "units: imperial\n")
+
     def test_clocks_map_names_to_time_zones_in_order_and_bad_zones_warn(self) -> None:
         self.assertEqual([clock.name for clock in Config().clocks], ["Portland", "Chicago", "UTC", "Strasbourg"])
         set_up = self.load("clocks:\n  Tokyo: Asia/Tokyo\n  Home: Mars/Olympus\n  Paris: ' Europe/Paris '\n")

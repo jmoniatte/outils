@@ -87,6 +87,7 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     command.py          # Runs a tab's command (pactl, bluetoothctl, nmcli) through tui-kit, failures as the tab's error; no Textual
     click_only.py       # Widgets a click must not give focus to, so the view keeps its keys; quick_button takes every click
     web.py              # JSON from a web service (Open-Meteo, ipinfo.io) with urllib, failures as the tab's error; no Textual
+    reload.py           # A view's reload one at a time: a timer tick while one runs is skipped, a request runs it again after; no Textual
     remote.py           # `outils --show <mode>`: tell an outils already running which tab to show, over a Unix socket; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
     dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
@@ -132,7 +133,7 @@ the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlin
 every link: "Data by open-meteo.com" on the Weather tab
 (its CC BY 4.0 license asks for it) and "Data by ipinfo.io" on the IP tab. A view with a `footnote`
 instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
-September 24, 2026"). Time, Dropbox, Sound, Wi-Fi, Life and Snake have neither, so the line is hidden there.
+September 24, 2026"), shown again when a new day starts (`FootnoteChanged`). Time, Dropbox, Sound, Wi-Fi, Life and Snake have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
 `dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder,
@@ -153,7 +154,9 @@ mode is a view in `widgets/` and an entry in `MODES`;
 
 `CalendarView` puts `before` + 1 + `after` `MonthView`s side by side (0 and 1 by default), the
 month in focus first, under the Previous, Today and Next buttons; it starts on today's
-month. `CalendarView.action_shift(delta)` moves them all (Previous, Next, `←` and `→`), and
+month. outils stays open for days, so `CalendarView.set_today` reads the date again every minute and
+when its tab shows (`tab_shown`): today's highlight moves, and a calendar on today's old month follows
+to the new one, while a month picked by hand stays. Tests pass `today=` and call `set_today`. `CalendarView.action_shift(delta)` moves them all (Previous, Next, `←` and `→`), and
 `show_month` puts any month in focus (Today, which is hidden while today's month is
 on show, first or not; hidden with `visible`, so it keeps its place). The buttons cannot take focus, so the calendar keeps it and its keys work after
 a click. The button row is as wide as the months (`width: 100%` of an auto-width parent), and
@@ -207,11 +210,13 @@ is now.
 
 `weather.py` talks to Open-Meteo through `web.get_json` (urllib), no account and no key; its
 calls block, so `WeatherView.load` runs `weather.forecast` in a worker. Failures raise
-`WeatherError`, shown in the view and in the footer.
+`WeatherError`, shown in the view and in the footer; so does an answer of another shape than
+expected, caught around the parsing, not field by field. A cache entry of another shape is asked again.
 
 `WeatherView` is a City box over a `ForecastView`. It opens on `location` from `config.yaml`
 (`Portland, OR` by default), and Enter in the box looks up what was typed; the forecast on show
-stays until the new one comes. Once found, the place replaces the text in the box, in full and
+stays until the new one comes. A forecast older than `MAX_AGE` (an hour, by wall time so a night's
+suspend counts) is asked again when the tab shows. Once found, the place replaces the text in the box, in full and
 in blue (`LookupBox.show_found`), which is the only place the forecast says where it is for;
 clicking the box turns it back to plain text to type over. The app sets `AUTO_FOCUS = None` so
 the box never takes focus by itself (it would swallow `?`, `t` and `q`); it has focus only once
@@ -230,11 +235,14 @@ the pop-up costs one request. `units` is `metric` (the default) or `imperial`, p
 Open-Meteo, which converts. °C and °F, right of the City box (`#weather-units`, buttons that
 cannot take focus), switch them, the one in use in bold blue: the place on show is asked again
 in the other units (`WeatherView.location`), and `WeatherView.UnitsChanged` has the app write
-`units:` to `config.yaml` (`config.save_units`, which leaves the rest of the file as it was).
+`units:` to `config.yaml` (`config.save_units`, which replaces only the value, found through PyYAML's node positions, checks
+the file reads back the same but for it, and writes it aside then moves it over, through a link to
+the file it points at; a file it cannot change safely is left as it was, with a warning in the footer).
 
 `ForecastView` shows the weather now (icon, temperature, words, then feels like,
 wind, humidity and rain), then one row per day for `weather.DAYS` days, today first and the
-others by their full day name. Icons are Nerd Font weather glyphs, as the Sound tab uses Nerd Font
+others by their full day name. The days are the forecast's own dates (`timezone=auto`, the place's
+time zone), so the first is "Today" there, whatever the date here. Icons are Nerd Font weather glyphs, as the Sound tab uses Nerd Font
 battery icons; a clear night gets the moon. The colors come from TCSS through the view's
 component classes (high orange, low cyan, rain chance blue).
 
@@ -272,10 +280,17 @@ does: stop quits the whole app, it does not pause, so nothing syncs until it sta
 footer. `dropbox stop` only asks the daemon to quit and returns at once, while `dropbox status`
 still answers for a few seconds, so `dropbox.stop` waits until it says not running
 (`STOP_TIMEOUT`). `dropbox start` gets no pipes (plain `subprocess.Popen`), since the daemon it launches would hold
-them open and the call would never return. `start` and `stop` are coroutines that check every
+them open and the call would never return. It exits 0 even when the daemon did not start, so
+`dropbox.start` waits, within `START_TIMEOUT`, until `dropbox status` says it runs. A command that
+exits non-zero raises `DropboxError` with the last line of its stderr, else of its stdout; a
+stopped client is no failure (`dropbox status` says "Dropbox isn't running!" and exits 0), and a
+status that times out or fails shows as running. `start` and `stop` are coroutines that check every
 `CHECK` seconds, not blocking calls in a thread: Python waits for its threads before it exits, so
 quitting during "Stopping..." would wait for the daemon. With no `dropbox` command, a red line says so in place of the button.
-The view asks every `POLL` seconds, only while its tab shows (`on_show` and `on_hide`).
+The view asks every `POLL` seconds, only while its tab shows (`on_show` and `on_hide`), one look
+at a time (`reload.Reload`): walking a big folder can take longer than `POLL`, and a cancelled
+look would leave its thread running and throw its result away, so a tick skips while one runs,
+and the look after a start or stop runs once it ends; a look overtaken that way is not shown (`Reload.overtaken`).
 
 `RecentFiles` shows a row per file: how long ago (`epoch.relative`), then its path, the folder dimmer than
 the file name (`$fg 60%`), which is bold; a path too long for the row loses its start, so the file's own name stays. As in flotte's
@@ -341,7 +356,9 @@ channel, so balance is lost.
 Volume keys and mute redraw the row at once through `SoundView.redraw`, then run pactl in the
 `_change` worker, then `status_bar.refresh`. `SoundView._pactl_lock` runs pactl calls one at a
 time, so a held key lands in order. Every change and a timer every `REFRESH_SECONDS` reload
-everything, the timer only while the tab shows (`tab_shown` and `tab_hidden`); a pactl failure while
+everything, the timer only while the tab shows (`tab_shown` and `tab_hidden`). One reload runs at a time
+(`reload.Reload`): a tick while one runs is skipped, and a change's reload runs after it, the one
+it overtook not shown (`Reload.overtaken`), so the change never flickers back and the latest state shows and a slow pactl or bluetoothctl never has its result thrown away; a pactl failure while
 reloading is shown in the footer once, not every 2 seconds (`SoundView._load_error`). `MAX_VOLUME` caps the keys at 100%. Every volume set here is a multiple of `VOLUME_STEP`:
 the keys go to the next multiple (`step_volume`, so 61% becomes 65% or 60%) and a click on the
 bar rounds to the nearest one. Other programs, and headphones' own buttons, can still leave any
@@ -396,10 +413,12 @@ lists bake their colors into Rich text, which `refresh_css` does not reach, so
 
 `nmcli.scan` reads `nmcli -t device wifi list` and `parse_scan` merges access points into one
 `Network` per SSID: the one in use wins, else the strongest. Hidden SSIDs are dropped. Saved
-profiles are matched by their `802-11-wireless.ssid`, not their name, and carried as
-`Network.saved_uuid`; every later nmcli call names a profile by UUID. `nmcli.scan` returns a
-`Scan` with both tabs' lists: `saved_list` adds a `Network` with `in_range=False` for each saved
-profile the scan did not see. Tab labels carry the counts; the footer shows the time of the last
+profiles (`nmcli.Profile`) are matched by their `802-11-wireless.ssid`, not their name, and carried as
+`Network.saved_uuid`; every later nmcli call names a profile by UUID. Two profiles can share an
+SSID: its Nearby row gets the most recently used (`connection.timestamp`), which is the one in use
+if any. `nmcli.scan` returns a `Scan` with both tabs' lists: `saved_list` has a row per profile,
+keyed by UUID (Nearby's rows are keyed by SSID, `TABS`), with `in_range=False` for each one the
+scan did not see. Tab labels carry the counts; the footer shows the time of the last
 scan, or in its place a status while scanning or connecting, when Wi-Fi is off, or when there is no
 internet or a login page.
 
@@ -410,10 +429,12 @@ when the app unmounts; otherwise quitting during a rescan hangs until it ends. A
 `tab_hidden`), and skips while a scan or a connect is running so it never cancels one. An nmcli failure while loading is shown in the footer once, as on the Sound tab.
 
 Joining (`WifiView._connect_requested`): the network in use opens its details; saved and open ones
-connect at once; 802.1X ones are refused with a hint; the rest open `PasswordScreen`, which runs
-the connect itself and stays open on an error. The password reaches nmcli on stdin through
-`--ask`, never in argv. When a new connect fails, `nmcli.connect` deletes the profile nmcli made
-for it. `WifiView.connecting` holds the SSID being joined; disconnect and forget wait for it.
+connect at once; 802.1X ones are refused with a hint; the rest open `PasswordScreen`, which only
+collects the password. Every connect runs in `WifiView._connect`, which reports to the dialog while
+it is open, so it stays open on an error. `WifiView.connecting` holds the SSID being joined until
+nmcli returns, even after Cancel, since nmcli cannot be stopped midway; another connect,
+disconnect and forget wait for it. The password reaches nmcli on stdin through `--ask`, never in
+argv. When a new connect fails, `nmcli.connect` deletes the profiles it made, not one saved before.
 
 `i` (or Enter on the network in use) opens `DetailsScreen` with `nmcli.details()`: `device show`
 for the addresses, plus the `*` row of `wifi list` for the access point, on its Details tab.
