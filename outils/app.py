@@ -9,11 +9,12 @@ from textual.actions import SkipAction
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.widget import Widget
 from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
 from . import REPOSITORY_URL, __version__
 from .config import CONFIG_FILE, Config, load_config, save_units
-from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, SoundView, TimeView, WeatherView
+from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, SoundView, TimeView, WeatherView, WifiView
 
 STYLES_DIR = Path(__file__).parent / "styles"
 # ouikit's stylesheets first, so the app's own rules win where they differ
@@ -26,6 +27,7 @@ MODES = {
     "ip": ("IP", IpView),
     "dropbox": ("Dropbox", DropboxView),
     "sound": ("Sound", SoundView),
+    "wifi": ("Wi-Fi", WifiView),
     "life": ("Life", LifeView),
     "snake": ("Snake", SnakeView),
 }
@@ -37,7 +39,7 @@ def load_stylesheet() -> str:
 
 
 class OutilsApp(BaseApp):
-    """Everyday tools, one tab each: a calendar, clocks, the weather forecast, this computer's public IP, Dropbox's sync, the sound devices, the Game of Life and snake."""
+    """Everyday tools, one tab each: a calendar, clocks, the weather forecast, this computer's public IP, Dropbox's sync, the sound devices, Wi-Fi, the Game of Life and snake."""
 
     TITLE = "outils"
     VERSION = __version__
@@ -60,12 +62,14 @@ class OutilsApp(BaseApp):
     def __init__(self, mode: str = DEFAULT_MODE, config: Config | None = None) -> None:
         self.mode = mode
         self.config = config if config is not None else load_config()
+        # The view of the tab on show, told when it hides
+        self.shown_view: Widget | None = None
         self.CSS = load_stylesheet()
         super().__init__(self.config.theme, CONFIG_FILE)
 
     def compose(self) -> ComposeResult:
         yield AppHeader()
-        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #dropbox, #sound, #life, #snake)
+        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #dropbox, #sound, #wifi, #life, #snake)
         with TabbedContent(initial=f"{self.mode}-mode", id="modes"):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):
@@ -90,10 +94,21 @@ class OutilsApp(BaseApp):
 
     def on_mount(self) -> None:
         # The mode keeps focus for its keys; tabs switch by click or with tab
-        self.query_one(Tabs).can_focus = False
+        self.mode_tabs.can_focus = False
         self._show_mode(self.query_one("#modes", TabbedContent).active_pane)
         for warning in self.config.warnings:
             self.notify(warning, severity="warning", timeout=10)
+
+    @property
+    def mode_tabs(self) -> Tabs:
+        """The row of outils' own tabs, not the Wi-Fi tab's Nearby and Saved."""
+        return self.query_one("#modes > ContentTabs", Tabs)
+
+    def apply_theme(self, theme_name: str) -> None:
+        super().apply_theme(theme_name)
+        # refresh_css only re-applies TCSS; the Wi-Fi lists bake their colors into Rich text
+        for view in self.query(WifiView):
+            view.set_colors()
 
     def on_weather_view_units_changed(self, event: WeatherView.UnitsChanged) -> None:
         save_units(event.units, CONFIG_FILE)
@@ -101,7 +116,7 @@ class OutilsApp(BaseApp):
     def action_next_mode(self) -> None:
         if len(self.screen_stack) > 1:
             raise SkipAction()
-        self.query_one(Tabs).action_next_tab()
+        self.mode_tabs.action_next_tab()
 
     @on(TabbedContent.TabActivated, "#modes")
     def _mode_activated(self, event: TabbedContent.TabActivated) -> None:
@@ -127,9 +142,18 @@ class OutilsApp(BaseApp):
             link.url = url
         elif footnote:
             label.update(footnote)
-        # The calendar, Dropbox, Life and Snake take focus for their keys; the city box must never take it by itself.
-        # Sound gives it to one of its cards once they are loaded
+        # Once per switch: on mount, TabbedContent then says again that the first tab is active
+        if view is self.shown_view:
+            return
+        # The calendar, Dropbox, Life and Snake take focus for their keys; the city box must never take it by itself
         if view.can_focus:
             view.focus()
         else:
             self.screen.set_focus(None)
+        # Told here, not by Show and Hide: Textual's partial relayout does not always send Show to a pane
+        # that comes back. Sound and Wi-Fi then give focus to one of their widgets
+        if hasattr(self.shown_view, "tab_hidden"):
+            self.shown_view.tab_hidden()
+        self.shown_view = view
+        if hasattr(view, "tab_shown"):
+            view.tab_shown()

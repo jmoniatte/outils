@@ -1,13 +1,15 @@
 [project]
 name = "outils"
 dynamic = ["version"]
-description = "TUI with everyday tools: a calendar and the weather forecast"
+description = "TUI with everyday tools: a calendar, clocks, the weather, IP, Dropbox, sound, Wi-Fi and two games"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "textual>=7.2.0",
     "rich>=14.2.0",
     "pyyaml>=6.0",
+    # The Wi-Fi tab's QR code to join a network from a phone
+    "segno>=1.6.6",
     "ouikit",
 ]
 

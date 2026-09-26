@@ -11,6 +11,7 @@ from textual.widgets import TabbedContent
 from outils.app import OutilsApp
 from outils.config import Config
 from outils.ipinfo import IpInfoError
+from outils.nmcli import Scan
 from outils.pactl import SINK, Device, Mixer
 from outils.weather import WeatherError
 from outils.widgets import CalendarView
@@ -34,6 +35,10 @@ class AppTest(unittest.TestCase):
                 # Nor pactl and bluetoothctl: one output in use, no headphones
                 patch("outils.pactl.mixer", return_value=Mixer(outputs=[SPEAKERS])) as self.mixer,
                 patch("outils.bluetooth.headsets", return_value=[]),
+                # Nor nmcli: Wi-Fi on, nothing in range
+                patch("outils.nmcli.wifi_enabled", return_value=True),
+                patch("outils.nmcli.connectivity", return_value="full"),
+                patch("outils.nmcli.scan", return_value=Scan([], [])) as self.scan,
             ):
                 app = OutilsApp(mode, config or Config(theme="onedark"))
                 async with app.run_test(size=(80, 24)) as pilot:
@@ -43,11 +48,11 @@ class AppTest(unittest.TestCase):
         asyncio.run(main())
 
     def test_opens_on_the_mode_named_and_tab_moves_to_the_next(self):
-        for mode in ("calendar", "time", "weather", "ip", "dropbox", "sound", "life", "snake"):
+        for mode in ("calendar", "time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake"):
             async def body(app, pilot, mode=mode):
                 tabs = app.query_one("#modes", TabbedContent)
                 self.assertEqual(app.query_one("#app-title").render().plain, "outils")
-                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "dropbox", "sound", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Dropbox", "Sound", "Life", "Snake"])
+                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Dropbox", "Sound", "Wi-Fi", "Life", "Snake"])
                 self.assertEqual(app.mode, mode)
 
             with self.subTest(mode=mode):
@@ -55,18 +60,18 @@ class AppTest(unittest.TestCase):
 
         async def body(app, pilot):
             # Only the mode on show asks its service, and only the first time
-            self.assertEqual((self.forecast.call_count, self.fetch.call_count, self.mixer.call_count), (0, 0, 0))
+            self.assertEqual((self.forecast.call_count, self.fetch.call_count, self.mixer.call_count, self.scan.call_count), (0, 0, 0, 0))
             self.assertIsInstance(app.focused, CalendarView)
             shown = []
-            for _ in range(9):
+            for _ in range(10):
                 await pilot.press("tab")
                 await pilot.pause()
                 await app.workers.wait_for_complete()
                 await pilot.pause()
                 shown.append((app.mode, app.focused))
-            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "dropbox", "sound", "life", "snake", "calendar", "time"])
-            # The calendar, Dropbox, Sound's cards, Life and Snake keep focus for their keys; nothing else takes it, so ?, t and q work
-            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "DropboxView", "DeviceCard", "LifeView", "SnakeView", "CalendarView", "NoneType"])
+            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake", "calendar", "time"])
+            # The calendar, Dropbox, Sound's cards, Wi-Fi's list, Life and Snake keep focus for their keys; nothing else takes it, so ?, t and q work
+            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "DropboxView", "DeviceCard", "NetworksTable", "LifeView", "SnakeView", "CalendarView", "NoneType"])
             # Hidden, Sound asks pactl no more
             calls = self.mixer.call_count
             await pilot.pause(2.5)
@@ -150,7 +155,7 @@ class AppTest(unittest.TestCase):
         self.run_app(body, "ip")
 
     def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
-        for mode in ("calendar", "time", "weather", "ip", "dropbox", "sound", "life", "snake"):
+        for mode in ("calendar", "time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake"):
             async def body(app, pilot):
                 footer = app.query_one("#app-footer")
                 close = app.query_one("#btn-close")

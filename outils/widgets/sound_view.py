@@ -57,12 +57,16 @@ class SoundView(Vertical):
     def on_mount(self) -> None:
         self.timer = self.set_interval(REFRESH_SECONDS, self.load_mixer, pause=True)
 
-    def on_show(self) -> None:
+    def tab_shown(self) -> None:
+        """The tab shows: focus on the output in use, and ask pactl until it hides."""
         self.showing = True
+        in_use = next((card for card in self.cards("outputs") if card.device.default), None)
+        if target := in_use or next(iter(self.cards()), None):
+            target.focus()
         self.load_mixer()
         self.timer.resume()
 
-    def on_hide(self) -> None:
+    def tab_hidden(self) -> None:
         self.showing = False
         self.timer.pause()
 

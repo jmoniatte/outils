@@ -8,5 +8,6 @@ from .snake_view import SnakeView
 from .sound_view import SoundView
 from .time_view import TimeView
 from .weather_view import WeatherView
+from .wifi_view import WifiView
 
-__all__ = ["CalendarView", "ClocksView", "DropboxView", "IpView", "LifeView", "MonthView", "SnakeView", "SoundView", "TimeView", "WeatherView"]
+__all__ = ["CalendarView", "ClocksView", "DropboxView", "IpView", "LifeView", "MonthView", "SnakeView", "SoundView", "TimeView", "WeatherView", "WifiView"]

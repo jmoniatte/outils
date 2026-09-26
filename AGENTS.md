@@ -1,15 +1,16 @@
 # outils
 
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
-`outils weather`, `outils ip`, `outils dropbox`, `outils sound`, `outils life` or `outils snake` says which tab it opens on.
+`outils weather`, `outils ip`, `outils dropbox`, `outils sound`, `outils wifi`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
 The calendar shows this month and the next; the time, the time now in a few places and an epoch converter; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
 or stops the Dropbox client on this computer and shows the files that changed last; Sound, the
-outputs and microphones through `pactl`, a simplified pavucontrol. Life, for fun,
+outputs and microphones through `pactl`, a simplified pavucontrol; Wi-Fi, the networks through
+NetworkManager's `nmcli`. Life, for fun,
 runs Conway's Game of Life, and Snake is the game of snake.
 
-It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouifi, flotte
+It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
 dialogs and the startup check all come from there. Put what every app would use
 in ouikit, not here; see its AGENTS.md. Like the other apps it draws no border around the
@@ -33,6 +34,7 @@ outils weather
 outils ip
 outils dropbox
 outils sound
+outils wifi
 outils life
 outils snake
 ```
@@ -73,9 +75,12 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     pactl.py            # Every pactl call and the parsing of its JSON output; no Textual
     bluetooth.py        # Paired Bluetooth headphones through bluetoothctl, merged into pactl's outputs; no Textual
     status_bar.py       # Signals i3blocks after a sound change so its volume block redraws
+    nmcli.py            # Every nmcli call and the parsing of its terse output; no Textual
+    qr.py               # A Wi-Fi network's QR code, drawn in half blocks (segno); no Textual
+    screens/            # The Wi-Fi tab's panels: details and share (ouikit PanelScreens) and the password
     widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py,
-                        # dropbox_view.py, sound_view.py, life_view.py, snake_view.py);
-                        # device_card.py is one sound device on one line;
+                        # dropbox_view.py, sound_view.py, wifi_view.py, life_view.py, snake_view.py);
+                        # device_card.py is one sound device on one line, networks_table.py a Wi-Fi list;
                         # month_view.py draws one month, clocks_view.py the time tab's clocks;
                         # lookup_box.py is the box the time, weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
@@ -87,9 +92,14 @@ Each mode is a tab of the `#modes` `TabbedContent`, under the header; the comman
 one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
 the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
 The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
-can take it (the calendar, for its arrows, Dropbox, for its list, Life, for `r`, and Snake, for its keys) and clears it otherwise
-(Sound then gives it to a card, see below), so a hidden view never keeps
-it. A view must not focus itself: `TabbedContent` switches to the tab of whatever has focus.
+can take it (the calendar, for its arrows, Dropbox, for its list, Life, for `r`, and Snake, for its keys) and clears it otherwise,
+so a hidden view never keeps it. A view must not focus itself while hidden: `TabbedContent`
+switches to the tab of whatever has focus. `_show_mode` also calls `tab_shown` on a view that
+has it, and `tab_hidden` on the one before (`OutilsApp.shown_view`): Sound and Wi-Fi use those,
+not `on_show` and `on_hide`, because Textual's partial relayout does not always send Show to a
+pane that comes back (Sound got none once Wi-Fi sat next to it). `tab_shown` is where they give
+focus to one of their own widgets. `_show_mode` runs twice for the first tab (on mount, then on
+`TabActivated`), so it does all this only when the view changes.
 Weather and IP ask their service the first time their tab shows (`on_show`), so opening the
 calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
 would break.
@@ -101,11 +111,12 @@ the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlin
 every link: "Weather data by open-meteo.com"
 (its CC BY 4.0 license asks for it) and "IP data by ipinfo.io". A view with a `footnote`
 instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
-September 24, 2026"). Time, Dropbox, Sound, Life and Snake have neither, so the line is hidden there.
+September 24, 2026"). Time, Dropbox, Sound, Wi-Fi, Life and Snake have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
 `dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder,
-and `pactl.mixer` and `bluetooth.headsets` so none runs `pactl` or `bluetoothctl`.
+`pactl.mixer` and `bluetooth.headsets` so none runs `pactl` or `bluetoothctl`, and the
+`nmcli` functions so none runs `nmcli`.
 `MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
 the first one is the default. Help lists the view's own `BINDINGS` (`HELP_BINDINGS` is set when
 its tab shows) before the app's. A new mode is a view in `widgets/` and an entry in `MODES`;
@@ -296,15 +307,15 @@ channel, so balance is lost.
 Volume keys and mute redraw the row at once through `SoundView.replace`, then run pactl in the
 `change` worker, then `status_bar.refresh`. `SoundView._pactl_lock` runs pactl calls one at a
 time, so a held key lands in order. Every change and a timer every `REFRESH_SECONDS` reload
-everything, the timer only while the tab shows (`on_show` and `on_hide`); a pactl failure while
+everything, the timer only while the tab shows (`tab_shown` and `tab_hidden`); a pactl failure while
 reloading is shown in the header once, not every 2 seconds (`SoundView._load_error`). `MAX_VOLUME` caps the keys at 100%. Every volume set here is a multiple of `VOLUME_STEP`:
 the keys go to the next multiple (`step_volume`, so 61% becomes 65% or 60%) and a click on the
 bar rounds to the nearest one. Other programs, and headphones' own buttons, can still leave any
 value; it is shown as it is.
 
 A card takes focus only while the tab shows (`SoundView.showing`), since `TabbedContent` would
-switch to the tab of a hidden card with focus; `_show_mode` clears focus, and the first load
-puts it on the output in use. The view gives Help the card's keys as well as its own
+switch to the tab of a hidden card with focus: `tab_shown` puts it on the output in use, or the
+first load does. The view gives Help the card's keys as well as its own
 (`SoundView.HELP_BINDINGS`, which `_show_mode` reads when a view has it).
 
 Every `pactl` and `bluetoothctl` call runs in a worker thread through `ouikit.processes.run`.
@@ -336,6 +347,56 @@ Not done yet: a test sound, live updates through `pactl subscribe` instead of po
 pairing new headphones. Pairing works without an interactive session:
 `bluetoothctl --timeout 15 scan on`, then `bluetoothctl --agent NoInputNoOutput pair <mac>`,
 `trust` and `connect`; a device that asks for a PIN would still need `bluetoothctl` itself.
+
+## Wi-Fi
+
+The Wi-Fi tab came from ouifi, a separate app until then (github.com/jmoniatte/ouifi), a front
+end to NetworkManager's `nmcli`. `WifiView` (`widgets/wifi_view.py`) has two lists in their own
+`TabbedContent` (`#networks-tabs`), Nearby and Saved, each a `NetworksTable`
+(`widgets/networks_table.py`), then a footer with the status and the Rescan, Disconnect and Wi-Fi
+buttons, right over the app's footer rule. `tab` moves between outils' own tabs, so `←` and `→`
+switch lists (`NetworksTable.SwitchList`); the table has no use for them. `WifiView` stops the
+inner `TabActivated`, and `OutilsApp.mode_tabs` names outils' own row of tabs, not this one. The
+lists bake their colors into Rich text, which `refresh_css` does not reach, so
+`OutilsApp.apply_theme` calls `WifiView.set_colors` with colors from `BaseApp.palette`.
+
+`nmcli.scan` reads `nmcli -t device wifi list` and `parse_scan` merges access points into one
+`Network` per SSID: the one in use wins, else the strongest. Hidden SSIDs are dropped. Saved
+profiles are matched by their `802-11-wireless.ssid`, not their name, and carried as
+`Network.saved_uuid`; every later nmcli call names a profile by UUID. `nmcli.scan` returns a
+`Scan` with both tabs' lists: `saved_list` adds a `Network` with `in_range=False` for each saved
+profile the scan did not see. Tab labels carry the counts; the footer status only shows while
+scanning, connecting, or when Wi-Fi is off.
+
+The first time the tab shows, and on `r`, it shows NetworkManager's cached list at once, then
+runs `--rescan yes`, which takes around 10 seconds; later shows only read the cached list. `nmcli.run` goes through `ouikit.processes.run`, and Python waits for
+worker threads before it exits, so ouikit's `BaseApp` kills the nmcli processes still running
+when the app unmounts; otherwise quitting during a rescan hangs until it ends. A timer refreshes the cached list every `REFRESH_SECONDS` while the tab shows (`tab_shown` and
+`tab_hidden`), and skips while a scan or a connect is running so it never cancels one.
+
+Joining (`WifiView._connect_requested`): the network in use and ones not in range do nothing; saved and open ones
+connect at once; 802.1X ones are refused with a hint; the rest open `PasswordScreen`, which runs
+the connect itself and stays open on an error. The password reaches nmcli on stdin through
+`--ask`, never in argv. When a new connect fails, `nmcli.connect` deletes the profile nmcli made
+for it. `WifiView.connecting` holds the SSID being joined; disconnect and forget wait for it.
+
+`i` (or Enter on the network in use) opens `DetailsScreen` with `nmcli.details()`: `device show`
+for the addresses, plus the `*` row of `wifi list` for the access point, on its Details tab.
+The Password (`p`) and QR code (`c`) tabs come from `ShareTabsScreen`, which calls
+`nmcli.share(uuid)` the first time either is shown: `nmcli -s` reads the profile's key-mgmt and
+password, which NetworkManager gives the session's owner without a prompt. Tab cycles the tabs (the app's `tab` steps aside while a panel is up).
+Enter on the Saved tab opens `ShareScreen`, those two tabs alone, for any profile but the one in
+use (that one gets `DetailsScreen`); connecting is done from Nearby.
+`qr.wifi_qr` builds the standard `WIFI:` text with segno and draws it with half blocks, two rows
+of modules per line. It is drawn in fixed black on white, since a phone camera needs that whatever
+the theme. The password is only read when asked for.
+
+The footer status is built by `WifiView._show_status` from `connecting`, `wifi_on`,
+`connectivity` and `scanning`, most urgent first. `connectivity` is `nmcli networking
+connectivity`, NetworkManager's cached check, read on every refresh. `portal` means a login page:
+`o` opens `LOGIN_PAGE_URL`, a plain http address that the login page intercepts. `w` flips the
+radio with `nmcli radio wifi on|off` and reloads again after `WIFI_ON_DELAY`, since the card
+lists nothing for a few seconds after it comes on.
 
 ## Life
 

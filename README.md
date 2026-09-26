@@ -1,7 +1,7 @@
 # outils
 
 Everyday tools in the terminal, one tab each: a calendar, clocks, the weather forecast, this
-computer's public IP, the Dropbox client's sync, the sound devices and, for fun, the Game of Life and snake. The calendar
+computer's public IP, the Dropbox client's sync, the sound devices, Wi-Fi and, for fun, the Game of Life and snake. The calendar
 shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once the current month is off screen, comes back to the current month.
@@ -44,6 +44,16 @@ and `→` (or `h` and `l`) turn it down or up by 5%, up to 100%. The tab reloads
 while it shows, and after each change it sends `SIGRTMIN+10` to i3blocks so its volume block
 redraws.
 
+The Wi-Fi tab lists the networks through NetworkManager's `nmcli`, in two lists: Nearby, the
+networks in range with their signal, security and band, the one in use first and in green, and
+Saved, every saved profile, in range or not. `←` and `→` switch lists. Click a network (or Enter)
+to join it: a saved or open one connects at once, a new one asks for its password. On the network
+in use, it opens its details (addresses, gateway, DNS, access point) with its password (`p`) and
+a QR code to join it from a phone (`c`); on the Saved list, any other network shows its password
+and QR code. `r` rescans, `d` disconnects, `f` forgets the selected network, `w` turns Wi-Fi on
+or off, and `o` opens the login page a hotel or café network asks for. Networks that sign in
+with 802.1X are left to nm-connection-editor.
+
 The Life tab runs [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life)
 on a random grid that fills the tab, its edges wrapping around. A grid that settles into still or
 blinking shapes is replaced by a new one after a few seconds; `r` starts a new one at once.
@@ -70,6 +80,7 @@ outils weather    # opens on the weather forecast
 outils ip         # opens on this computer's public (WAN) IP address, from ipinfo.io
 outils dropbox    # opens on the Dropbox app's state and the files synced last
 outils sound      # opens on the sound outputs and microphones
+outils wifi       # opens on the Wi-Fi networks
 outils life       # opens on the Game of Life
 outils snake      # opens on the game of snake
 ```
