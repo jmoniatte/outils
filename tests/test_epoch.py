@@ -11,7 +11,7 @@ from outils.config import Config
 from outils.epoch import EpochError, parse, relative, rows
 from outils.widgets import TimeView
 from outils.widgets.time_view import EpochDetails
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 NOW = datetime(2026, 9, 25, 5, 4, tzinfo=UTC)
 PORTLAND = ZoneInfo("America/Los_Angeles")

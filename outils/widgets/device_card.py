@@ -10,7 +10,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Static
 
 from ..pactl import MAX_VOLUME, Device
-from ouikit.shortcuts import ACTIONS
+from tui_kit.shortcuts import ACTIONS
 
 # Every volume set here is a multiple of this
 VOLUME_STEP = 5

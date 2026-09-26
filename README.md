@@ -69,7 +69,7 @@ Each point makes the snake a little quicker; the best score is kept between game
 ```
 
 It installs `outils` as a [uv](https://docs.astral.sh/uv/) tool. It needs SSH access to GitHub,
-where its shared UI library, [ouikit](https://github.com/jmoniatte/ouikit), lives.
+where its shared UI library, [tui-kit](https://github.com/jmoniatte/tui-kit), lives.
 
 ## Use
 

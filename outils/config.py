@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
-from ouikit.config import read_theme
-from ouikit.theme import TERMINAL_THEME
+from tui_kit.config import read_theme
+from tui_kit.theme import TERMINAL_THEME
 
 from .clocks import DEFAULT_CLOCKS, Clock, find_zone
 from .months import WEEKDAY_NAMES
@@ -21,7 +21,7 @@ class Config:
     """Optional, hand-edited settings."""
 
     # Set with t in the app; "terminal" reads the terminal's own colours, otherwise any
-    # scheme in ouikit (see ouikit.theme.list_themes()).
+    # scheme in tui-kit (see tui_kit.theme.list_themes()).
     theme: str = TERMINAL_THEME
     # The first column of the calendar, as calendar counts days: Monday is 0, Sunday 6
     week_start: int = 0

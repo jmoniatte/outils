@@ -1,6 +1,6 @@
 from datetime import date
 
-from ouikit.shortcuts import ACTIONS
+from tui_kit.shortcuts import ACTIONS
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding

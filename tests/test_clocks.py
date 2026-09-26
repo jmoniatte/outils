@@ -10,7 +10,7 @@ from outils.clocks import Clock, Reading, read
 from outils.config import Config
 from outils.widgets import ClocksView
 from outils.widgets.clocks_view import DST_ICON
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 SUMMER = datetime(2026, 9, 25, 5, 4, 30, tzinfo=UTC)
 WINTER = datetime(2026, 1, 15, 5, 4, tzinfo=UTC)

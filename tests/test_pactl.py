@@ -84,9 +84,9 @@ class CommandTest(unittest.TestCase):
 
     def test_failures_become_pactl_errors(self):
         failed = subprocess.CompletedProcess([], 1, "", "Failure: No such entity\n")
-        with patch("ouikit.processes.run", return_value=failed), self.assertRaisesRegex(PactlError, "No such entity"):
+        with patch("tui_kit.processes.run", return_value=failed), self.assertRaisesRegex(PactlError, "No such entity"):
             pactl.run("set-sink-mute", "99", "1")
-        with patch("ouikit.processes.run", side_effect=FileNotFoundError), self.assertRaisesRegex(PactlError, "not installed"):
+        with patch("tui_kit.processes.run", side_effect=FileNotFoundError), self.assertRaisesRegex(PactlError, "not installed"):
             pactl.run("info")
 
 

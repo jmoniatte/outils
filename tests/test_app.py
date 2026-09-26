@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ouikit.help_screen import HelpScreen
-from ouikit.theme_picker import ThemePicker
+from tui_kit.help_screen import HelpScreen
+from tui_kit.theme_picker import ThemePicker
 from textual.widgets import TabbedContent
 
 from outils.app import OutilsApp

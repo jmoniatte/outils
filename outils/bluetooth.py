@@ -8,7 +8,7 @@ import re
 import subprocess
 from dataclasses import dataclass, replace
 
-from ouikit import processes
+from tui_kit import processes
 
 from .pactl import SINK, Device, Mixer
 

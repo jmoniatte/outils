@@ -1,9 +1,9 @@
 from pathlib import Path
 
-import ouikit
-from ouikit.app_header import AppHeader
-from ouikit.base_app import COPY_BINDING, HELP_BINDING, THEME_BINDING, BaseApp
-from ouikit.shortcuts import GENERAL
+import tui_kit
+from tui_kit.app_header import AppHeader
+from tui_kit.base_app import COPY_BINDING, HELP_BINDING, THEME_BINDING, BaseApp
+from tui_kit.shortcuts import GENERAL
 from textual import on
 from textual.actions import SkipAction
 from textual.app import ComposeResult
@@ -17,8 +17,8 @@ from .config import CONFIG_FILE, Config, load_config, save_units
 from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, SoundView, TimeView, WeatherView, WifiView
 
 STYLES_DIR = Path(__file__).parent / "styles"
-# ouikit's stylesheets first, so the app's own rules win where they differ
-STYLE_FILES = (*ouikit.STYLE_FILES, STYLES_DIR / "outils.tcss")
+# tui-kit's stylesheets first, so the app's own rules win where they differ
+STYLE_FILES = (*tui_kit.STYLE_FILES, STYLES_DIR / "outils.tcss")
 # Each mode by the name given on the command line, as its tab; the first one is the default
 MODES = {
     "calendar": ("Calendar", CalendarView),

@@ -5,8 +5,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from ouikit.header_notification import HeaderNotification
-from ouikit.help_screen import HelpScreen
+from tui_kit.header_notification import HeaderNotification
+from tui_kit.help_screen import HelpScreen
 
 from outils.app import OutilsApp
 from outils.bluetooth import Headset

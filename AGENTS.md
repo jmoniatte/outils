@@ -10,10 +10,10 @@ outputs and microphones through `pactl`, a simplified pavucontrol; Wi-Fi, the ne
 NetworkManager's `nmcli`. Life, for fun,
 runs Conway's Game of Life, and Snake is the game of snake.
 
-It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with flotte
+It is built on [tui-kit](https://github.com/jmoniatte/tui-kit), shared with flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
 dialogs and the startup check all come from there. Put what every app would use
-in ouikit, not here; see its AGENTS.md. Like the other apps it draws no border around the
+in tui-kit, not here; see its AGENTS.md. Like the other apps it draws no border around the
 screen, and every message, errors included, goes to the header.
 
 ## Rules
@@ -21,7 +21,7 @@ screen, and every message, errors included, goes to the header.
 - Do not git commit unless asked
 - Keep the shortcuts few: the ones on the Help panel are the whole set
 - The help screen lists every binding that has a description and a `group`
-  (`ouikit.shortcuts.ACTIONS` or `GENERAL`) in `OutilsApp.HELP_BINDINGS` and
+  (`tui_kit.shortcuts.ACTIONS` or `GENERAL`) in `OutilsApp.HELP_BINDINGS` and
   `OutilsApp.BINDINGS`; document a new key there
 - Never hardcode a color in a `.tcss` file
 
@@ -39,7 +39,7 @@ outils life
 outils snake
 ```
 
-It refuses to start unless stdin and stdout are a terminal (ouikit's `start`).
+It refuses to start unless stdin and stdout are a terminal (tui-kit's `start`).
 
 ## Test
 
@@ -51,18 +51,18 @@ uv run ruff check .
 ```
 
 There is no pytest. `ruff` is pinned in the `dev` dependency group, so use `uv run ruff`.
-ouikit comes from GitHub's master (`[tool.uv.sources]`); after a push there,
-`uv lock --upgrade-package ouikit` picks it up. To work on both at once, switch that source to
-the commented-out `../ouikit` path.
+tui-kit comes from GitHub's master (`[tool.uv.sources]`); after a push there,
+`uv lock --upgrade-package tui-kit` picks it up. To work on both at once, switch that source to
+the commented-out `../tui-kit` path.
 
 ## Structure
 
 ```
 outils/                 # git root + pyproject.toml (run uv commands here)
   outils/               # Python package
-    app.py              # OutilsApp, an ouikit BaseApp: MODES, the header, the keys
+    app.py              # OutilsApp, a tui-kit BaseApp: MODES, the header, the keys
     __main__.py         # The command line: which tab to open on
-    config.py           # Optional ~/.config/outils/config.yaml (theme, through ouikit.config; week_start,
+    config.py           # Optional ~/.config/outils/config.yaml (theme, through tui_kit.config; week_start,
                         # clocks, location, units)
     clocks.py           # The time, offset and summer time in an IANA time zone; no Textual
     epoch.py            # Epoch timestamps to dates and back; no Textual
@@ -77,13 +77,13 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     status_bar.py       # Signals i3blocks after a sound change so its volume block redraws
     nmcli.py            # Every nmcli call and the parsing of its terse output; no Textual
     qr.py               # A Wi-Fi network's QR code, drawn in half blocks (segno); no Textual
-    screens/            # The Wi-Fi tab's panels: details and share (ouikit PanelScreens) and the password
+    screens/            # The Wi-Fi tab's panels: details and share (tui-kit PanelScreens) and the password
     widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py,
                         # dropbox_view.py, sound_view.py, wifi_view.py, life_view.py, snake_view.py);
                         # device_card.py is one sound device on one line, networks_table.py a Wi-Fi list;
                         # month_view.py draws one month, clocks_view.py the time tab's clocks;
                         # lookup_box.py is the box the time, weather and IP tabs type in
-    styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
+    styles/outils.tcss  # outils's own styles, joined after tui-kit's (app.STYLE_FILES)
 ```
 
 ## Modes
@@ -318,8 +318,8 @@ switch to the tab of a hidden card with focus: `tab_shown` puts it on the output
 first load does. The view gives Help the card's keys as well as its own
 (`SoundView.HELP_BINDINGS`, which `_show_mode` reads when a view has it).
 
-Every `pactl` and `bluetoothctl` call runs in a worker thread through `ouikit.processes.run`.
-Python waits for those threads before it exits, so ouikit's `BaseApp` kills whatever is still
+Every `pactl` and `bluetoothctl` call runs in a worker thread through `tui_kit.processes.run`.
+Python waits for those threads before it exits, so tui-kit's `BaseApp` kills whatever is still
 running when the app unmounts; otherwise quitting during a slow call (a connect can take 20
 seconds) waits for it.
 
@@ -369,8 +369,8 @@ profile the scan did not see. Tab labels carry the counts; the footer status onl
 scanning, connecting, or when Wi-Fi is off.
 
 The first time the tab shows, and on `r`, it shows NetworkManager's cached list at once, then
-runs `--rescan yes`, which takes around 10 seconds; later shows only read the cached list. `nmcli.run` goes through `ouikit.processes.run`, and Python waits for
-worker threads before it exits, so ouikit's `BaseApp` kills the nmcli processes still running
+runs `--rescan yes`, which takes around 10 seconds; later shows only read the cached list. `nmcli.run` goes through `tui_kit.processes.run`, and Python waits for
+worker threads before it exits, so tui-kit's `BaseApp` kills the nmcli processes still running
 when the app unmounts; otherwise quitting during a rescan hangs until it ends. A timer refreshes the cached list every `REFRESH_SECONDS` while the tab shows (`tab_shown` and
 `tab_hidden`), and skips while a scan or a connect is running so it never cancels one.
 
@@ -447,7 +447,7 @@ a new board, back to `ready`. The best score is kept in `~/.cache/outils/snake.j
 
 ## Themes
 
-`t` opens ouikit's theme picker and the choice is saved to `~/.config/outils/config.yaml`; there
+`t` opens tui-kit's theme picker and the choice is saved to `~/.config/outils/config.yaml`; there
 is no Settings panel. Anything drawn with Rich instead of TCSS must take its colors from
 `BaseApp.palette` and be repainted in an `apply_theme` override.
 

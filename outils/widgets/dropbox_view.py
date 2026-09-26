@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ouikit.shortcuts import ACTIONS
+from tui_kit.shortcuts import ACTIONS
 from rich.style import Style
 from rich.text import Text
 from textual import on, work

@@ -8,7 +8,7 @@ from outils.app import load_stylesheet
 from outils.config import Config
 from outils.life import random_cells, step
 from outils.widgets import LifeView
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 GLIDER = {(1, 0), (2, 1), (0, 2), (1, 2), (2, 2)}
 

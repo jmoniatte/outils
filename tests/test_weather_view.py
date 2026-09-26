@@ -13,7 +13,7 @@ from outils.config import Config
 from outils.weather import IMPERIAL, METRIC, WeatherError, parse_forecast
 from outils.widgets import WeatherView
 from outils.widgets.weather_view import ForecastView
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 from test_weather import FORECAST, PLACE
 

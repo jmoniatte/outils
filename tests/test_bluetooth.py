@@ -47,10 +47,10 @@ class BluetoothTest(unittest.TestCase):
     def test_failures_become_bluetooth_errors(self):
         # bluetoothctl prints its failures on stdout, sometimes with exit status 0
         failed = subprocess.CompletedProcess([], 0, "Attempting to connect to A8\nFailed to connect: org.bluez.Error.Failed\n", "")
-        with patch("ouikit.processes.run", return_value=failed), self.assertRaisesRegex(BluetoothError, "^Failed to connect"):
+        with patch("tui_kit.processes.run", return_value=failed), self.assertRaisesRegex(BluetoothError, "^Failed to connect"):
             bluetooth.connect("A8")
         missing = subprocess.CompletedProcess([], 1, "Device 00:11 not available\n", "")
-        with patch("ouikit.processes.run", return_value=missing), self.assertRaisesRegex(BluetoothError, "not available"):
+        with patch("tui_kit.processes.run", return_value=missing), self.assertRaisesRegex(BluetoothError, "not available"):
             bluetooth.disconnect("00:11")
 
 

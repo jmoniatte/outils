@@ -9,7 +9,7 @@ import subprocess
 from collections import Counter
 from dataclasses import dataclass, field, replace
 
-from ouikit import processes
+from tui_kit import processes
 
 TIMEOUT = 5
 # pavucontrol lets a slider go past 100% up to 153%; that distorts, so the keys stop here

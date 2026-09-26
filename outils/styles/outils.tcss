@@ -48,7 +48,7 @@
     border-top: solid $gutter;
 }
 
-/* Neutral, like the Close button on ouikit's panels */
+/* Neutral, like the Close button on tui-kit's panels */
 #btn-close {
     width: auto;
     min-width: 0;
@@ -272,7 +272,7 @@ MonthView > .month--today {
     color: $green;
 }
 
-/* Underlined like ouikit's theme filter, so it reads as a place to type */
+/* Underlined like tui-kit's theme filter, so it reads as a place to type */
 LookupBox {
     width: 40;
     height: 2;
@@ -757,7 +757,7 @@ NetworksTable > .datatable--hover {
     background: $green 50%;
 }
 
-/* The connection details and a saved network's password and QR code, in ouikit's panel */
+/* The connection details and a saved network's password and QR code, in tui-kit's panel */
 PanelScreen #title-separator {
     height: 1;
 }

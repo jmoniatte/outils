@@ -1,6 +1,6 @@
 import random
 
-from ouikit.shortcuts import ACTIONS
+from tui_kit.shortcuts import ACTIONS
 from rich.text import Text
 from textual.binding import Binding
 from textual.events import Resize

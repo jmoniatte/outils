@@ -10,8 +10,8 @@ from textual.widgets import Button, Static, TabbedContent, TabPane, Tabs
 from .. import nmcli
 from ..nmcli import Network, NmcliError
 from ..qr import wifi_qr
-from ouikit.shortcuts import ACTIONS
-from ouikit.panel import PanelScreen
+from tui_kit.shortcuts import ACTIONS
+from tui_kit.panel import PanelScreen
 
 # A phone camera needs dark modules on light, whatever the theme
 QR_STYLE = "#000000 on #ffffff"

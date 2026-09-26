@@ -1,8 +1,8 @@
 import asyncio
 from datetime import datetime
 
-from ouikit.dialog import ConfirmDialog
-from ouikit.shortcuts import ACTIONS
+from tui_kit.dialog import ConfirmDialog
+from tui_kit.shortcuts import ACTIONS
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding

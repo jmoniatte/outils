@@ -5,11 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ouikit.dialog import ConfirmDialog
-from ouikit.header_notification import HeaderNotification
+from tui_kit.dialog import ConfirmDialog
+from tui_kit.header_notification import HeaderNotification
 from textual.widgets import TabbedContent, TabPane
 
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 from outils.app import OutilsApp
 from outils.config import Config

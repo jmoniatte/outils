@@ -7,7 +7,7 @@ from textual.app import App, ComposeResult
 from outils.app import load_stylesheet
 from outils.config import Config
 from outils.widgets import CalendarView, MonthView
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 TODAY = date(2026, 9, 24)
 

@@ -14,7 +14,7 @@ from outils.config import Config
 from outils.ipinfo import IpInfoError, fetch, resolve, rows
 from outils.widgets import IpView
 from outils.widgets.ip_view import LABEL, IpDetails
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 ANSWER = {
     "ip": "97.115.117.246",

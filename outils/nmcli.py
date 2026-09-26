@@ -6,7 +6,7 @@ Every call blocks until nmcli exits; the app runs them with asyncio.to_thread.
 import subprocess
 from dataclasses import dataclass
 
-from ouikit import processes
+from tui_kit import processes
 
 # How long nmcli waits for a connection to come up before giving up
 CONNECT_TIMEOUT = 30

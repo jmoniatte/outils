@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from ouikit import processes
+from tui_kit import processes
 
 from outils import nmcli
 from outils.nmcli import Network, NmcliError, parse_details, parse_profiles, parse_scan, parse_share, saved_list, split_terse

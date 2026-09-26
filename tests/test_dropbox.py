@@ -15,7 +15,7 @@ from outils.config import Config
 from outils.dropbox import MISSING, RUNNING, STOPPED, DropboxError, RecentFile, folder, recent, start, state, status, stop
 from outils.widgets import DropboxView
 from outils.widgets.dropbox_view import RecentFiles
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 
 class DropboxTest(unittest.TestCase):

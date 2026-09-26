@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import replace
 
-from ouikit.shortcuts import GENERAL
+from tui_kit.shortcuts import GENERAL
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding

@@ -68,7 +68,7 @@ class MonthView(Widget):
         for column, label in enumerate(weekday_labels(self.first_weekday)):
             is_weekend = (self.first_weekday + column) % 7 in WEEKEND
             text.append(f" {label} ", style=self._style("weekend" if is_weekend else "weekdays"))
-        # Dashed like ouikit's titles, and only as wide as the day names, not the padding either side
+        # Dashed like tui-kit's titles, and only as wide as the day names, not the padding either side
         text.append("\n " + "-" * (MONTH_WIDTH - 2), style=self._style("rule"))
         for week in month_weeks(self.year, self.month, self.first_weekday):
             text.append("\n")

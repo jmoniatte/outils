@@ -12,7 +12,7 @@ from outils.config import Config
 from outils.snake import DOWN, LEFT, RIGHT, UP, Game, read_best, save_best
 from outils.widgets import SnakeView
 from outils.widgets.snake_view import OVER, PAUSED, PLAYING, READY, SnakeBoard, score_level
-from ouikit.theme import load_palette
+from tui_kit.theme import load_palette
 
 
 def game(width=10, height=6, snake=((5, 3), (4, 3), (3, 3)), food=(9, 0)):

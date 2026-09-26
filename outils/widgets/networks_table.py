@@ -10,7 +10,7 @@ from textual.message import Message
 from textual.widgets import DataTable
 
 from ..nmcli import Network
-from ouikit.shortcuts import ACTIONS, GENERAL
+from tui_kit.shortcuts import ACTIONS, GENERAL
 
 # (key, width); the SSID column fits the longest SSID the standard allows
 COLUMNS = (
