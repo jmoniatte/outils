@@ -8,7 +8,7 @@ highlighted. **← Previous** and **Next →** (or the arrow keys) move a month 
 Today's date, in full, is at the bottom right.
 
 The Time tab gives the time now in a few places, with the offset from UTC and a yellow sun while
-summer time is in force (see `clocks` below). Above the clocks, the Epoch box converts an epoch
+summer time is in force (see `clocks` below). Under the clocks, the Epoch box converts an epoch
 timestamp to a date, or a date to a timestamp: click it, type `1790222400` (seconds; 13 digits are milliseconds) or `2026-09-24 15:30` (local time, unless it ends in `Z` or an offset like
 `+02:00`) and press Enter. It shows the current time, ticking, until you use it; the green
 **Now** button next to it, or Enter on an empty box, goes back to it.
@@ -49,8 +49,8 @@ networks in range with their signal, security and band, the one in use first and
 Saved, every saved profile, in range or not. `←` and `→` switch lists. Click a network (or Enter)
 to join it: a saved or open one connects at once, a new one asks for its password. On the network
 in use, it opens its details (addresses, gateway, DNS, access point) with its password (`p`) and
-a QR code to join it from a phone (`c`); on the Saved list, any other network shows its password
-and QR code. `r` rescans, `d` disconnects, `f` forgets the selected network, `w` turns Wi-Fi on
+a QR code to join it from a phone (`c`), shown alone over the whole window; on the Saved list, any
+other network shows its password and QR code. `r` rescans, `d` disconnects, `f` forgets the selected network, `w` turns Wi-Fi on
 or off, and `o` opens the login page a hotel or café network asks for. Networks that sign in
 with 802.1X are left to nm-connection-editor.
 
@@ -78,9 +78,9 @@ outils            # opens on the calendar
 outils time       # opens on the clocks
 outils weather    # opens on the weather forecast
 outils ip         # opens on this computer's public (WAN) IP address, from ipinfo.io
-outils dropbox    # opens on the Dropbox app's state and the files synced last
 outils sound      # opens on the sound outputs and microphones
 outils wifi       # opens on the Wi-Fi networks
+outils dropbox    # opens on the Dropbox app's state and the files synced last
 outils life       # opens on the Game of Life
 outils snake      # opens on the game of snake
 ```
@@ -89,8 +89,8 @@ Each command opens on its own tab, so a status-bar block can open the one it is 
 outils already open, `outils --show weather` switches it to that tab instead of starting another;
 it exits 0 when it switched, 2 when that tab was on show already, and 1 when no outils is running,
 so a block's script can show the window, hide it, or start outils. Click a
-tab or press `Tab` to switch. `?` shows the shortcuts, `t` picks a theme, `y` copies the text selected with the mouse, and `q`, `Esc` or the **Close** button at the bottom left quits.
-Click the name in the header to open the shortcuts too.
+tab or press `Tab` to switch. `?` or the **Help** button at the bottom right shows the shortcuts, `t` picks a theme, `y` copies the text selected with the mouse, and `q`, `Esc` or the **Close** button at the bottom left quits.
+Messages show at the bottom too, in Help's place until they clear.
 
 ## Configuration
 

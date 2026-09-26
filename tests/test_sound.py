@@ -112,12 +112,12 @@ class SoundTest(unittest.TestCase):
             self.assertEqual(backgrounds[1], highlight)
             self.assertNotEqual(backgrounds[0], highlight)
 
-            # Help lists the keys of the card in focus and of the view, then the app's
+            # Help's Sound column lists the keys of the card in focus and of the view
             await pilot.press("question_mark")
             await pilot.pause()
             self.assertIsInstance(app.screen, HelpScreen)
-            keys = [key.render().plain for key in app.screen.query(".shortcut-key")]
-            self.assertEqual(keys, ["←", "→", "m", "enter", "c", "↓ ↑", "?", "t", "y", "tab", "q"])
+            keys = [key.render().plain for key in app.screen.query("#shortcuts-sound .shortcut-key")]
+            self.assertEqual(keys, ["←", "→", "m", "enter", "c", "↓ ↑"])
 
         self.run_app(body, width=76)
 

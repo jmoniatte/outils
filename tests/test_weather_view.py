@@ -69,13 +69,13 @@ class WeatherViewTest(unittest.TestCase):
             self.assertTrue(city.has_class("-found"))
             self.assertEqual(city.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
             lines = shown(app)
-            self.assertIn("12°C  Clear", lines[0])
-            self.assertEqual(lines[1], "   Feels like 9°C · Wind 8 km/h · Humidity 65 % · Rain 0 mm")
+            self.assertIn("12°C   Clear", lines[0])
+            self.assertEqual(lines[1], "    Feels like 9°C  ·  Wind 8 km/h  ·  Humidity 65 %  ·  Rain 0 mm")
             self.assertTrue(lines[3].startswith("Today"))
             self.assertIn("Light rain", lines[3])
-            self.assertIn("18° /   9°    79 %    6.5 mm", lines[3])
+            self.assertIn("18° /   9°      79 %      6.5 mm", lines[3])
             # A day with no chance of rain given shows a dash
-            self.assertTrue(lines[4].startswith("Friday     "))
+            self.assertTrue(lines[4].startswith("Friday      "))
             self.assertIn("  – %", lines[4])
 
         self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
@@ -150,7 +150,7 @@ class WeatherModeTest(unittest.TestCase):
                     self.assertIsNone(app.focused)
                     await pilot.press("question_mark")
                     await pilot.pause()
-                    self.assertEqual(type(app.screen).__name__, "HelpScreen")
+                    self.assertEqual(type(app.screen).__name__, "OutilsHelpScreen")
 
         asyncio.run(main())
 

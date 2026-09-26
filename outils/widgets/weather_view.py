@@ -13,10 +13,13 @@ from ..config import Config
 from ..weather import IMPERIAL, METRIC, UNIT_LABELS, Forecast, Place, WeatherError, describe, forecast
 from .lookup_box import LookupBox
 
-# The day's label, its icon and words, then its high and low, its chance of rain and how much
-# "Wednesday" and two spaces
-DAY_LABEL = 11
-DESCRIPTION = 20
+# The day's label, its icon and words, then its high and low, its chance of rain and how much.
+# Roomy, now the pop-up is wider: "Wednesday" and three spaces
+DAY_LABEL = 12
+# "Thunderstorm, hail" and four spaces
+DESCRIPTION = 22
+# Between the numbers' columns
+GAP = " " * 5
 
 
 class WeatherView(Vertical):
@@ -37,7 +40,7 @@ class WeatherView(Vertical):
 
     # Shown at the bottom right, over the footer's rule: the words, then the link. Open-Meteo's
     # data is CC BY 4.0, which asks for it
-    CREDIT = ("Weather data by", "https://open-meteo.com")
+    CREDIT = ("Data by", "https://open-meteo.com")
 
     def __init__(self, config: Config, today: date | None = None) -> None:
         super().__init__(id="weather")
@@ -154,26 +157,26 @@ class ForecastView(Widget):
         now = self.forecast.current
         words, icon = describe(now.code, now.is_day)
         text = Text()
-        text.append(f"{icon}  ")
+        text.append(f"{icon}   ")
         text.append(f"{round(now.temperature)}{labels['temperature']}", style=self._style("temperature"))
-        text.append(f"  {words}")
+        text.append(f"   {words}")
         details = [
             f"Feels like {round(now.feels_like)}{labels['temperature']}",
             f"Wind {round(now.wind)} {labels['wind']}",
             f"Humidity {now.humidity} %",
             f"Rain {now.precipitation:g} {labels['precipitation']}",
         ]
-        text.append("\n   " + " · ".join(details), style=self._style("dim"))
+        text.append("\n    " + "  ·  ".join(details), style=self._style("dim"))
         text.append("\n")
         for day in self.forecast.days:
             words, icon = describe(day.code)
             # A week from today never repeats a day name, so the name alone is enough
             label = "Today" if day.day == self.today else f"{day.day:%A}"
-            text.append(f"\n{label:<{DAY_LABEL}}{icon}  {words:<{DESCRIPTION}}")
+            text.append(f"\n{label:<{DAY_LABEL}}{icon}   {words:<{DESCRIPTION}}")
             text.append(f"{round(day.high):>3}°", style=self._style("high"))
             text.append(" / ", style=self._style("dim"))
             text.append(f"{round(day.low):>3}°", style=self._style("low"))
             chance = "  –" if day.rain_chance is None else f"{day.rain_chance:>3}"
-            text.append(f"   {chance} %", style=self._style("rain"))
-            text.append(f"   {day.precipitation:>4.1f} {labels['precipitation']}", style=self._style("dim"))
+            text.append(f"{GAP}{chance} %", style=self._style("rain"))
+            text.append(f"{GAP}{day.precipitation:>4.1f} {labels['precipitation']}", style=self._style("dim"))
         return text

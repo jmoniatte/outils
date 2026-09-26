@@ -23,7 +23,7 @@ class IpView(Vertical):
     """
 
     # Shown at the bottom right, over the footer's rule: the words, then the link
-    CREDIT = ("IP data by", "https://ipinfo.io")
+    CREDIT = ("Data by", "https://ipinfo.io")
 
     def __init__(self, config: Config) -> None:
         super().__init__(id="ip")

@@ -2,19 +2,21 @@ import asyncio
 from pathlib import Path
 
 import tui_kit
-from tui_kit.app_header import AppHeader
+from tui_kit.header_notification import HeaderNotification
 from tui_kit.base_app import COPY_BINDING, HELP_BINDING, THEME_BINDING, BaseApp
 from tui_kit.shortcuts import GENERAL
 from textual import on
 from textual.actions import SkipAction
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.notifications import Notification
 from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
 from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
 from . import REPOSITORY_URL, __version__, remote
 from .config import CONFIG_FILE, Config, load_config, save_units
+from .screens import OutilsHelpScreen
 from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, SoundView, TimeView, WeatherView, WifiView
 
 STYLES_DIR = Path(__file__).parent / "styles"
@@ -26,13 +28,33 @@ MODES = {
     "time": ("Time", TimeView),
     "weather": ("Weather", WeatherView),
     "ip": ("IP", IpView),
-    "dropbox": ("Dropbox", DropboxView),
     "sound": ("Sound", SoundView),
     "wifi": ("Wi-Fi", WifiView),
+    "dropbox": ("Dropbox", DropboxView),
     "life": ("Life", LifeView),
     "snake": ("Snake", SnakeView),
 }
 DEFAULT_MODE = next(iter(MODES))
+
+
+class FooterMessage(HeaderNotification):
+    """tui-kit's messages, which find this widget wherever it is: here, in the footer, since outils
+    has no title bar. Help hides while one shows, so the message ends where Help ends, on the right.
+    """
+
+    def show_notification(self, notification: Notification) -> None:
+        self._show_help(False)
+        super().show_notification(notification)
+
+    def clear_notification(self) -> None:
+        super().clear_notification()
+        # Once the message is gone from the screen: Help sits over the end of its line, so both at once
+        # would show Help over a message not yet cleared
+        self.call_after_refresh(self._show_help, True)
+
+    def _show_help(self, shown: bool) -> None:
+        # Unless a new message came in meanwhile
+        self.screen.query_one("#btn-help").display = shown and not self.display
 
 
 def load_stylesheet() -> str:
@@ -72,13 +94,14 @@ class OutilsApp(BaseApp):
         super().__init__(self.config.theme, CONFIG_FILE)
 
     def compose(self) -> ComposeResult:
-        yield AppHeader()
-        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #dropbox, #sound, #wifi, #life, #snake)
+        # No title bar: the tabs say where you are, and the messages sit by the buttons at the bottom
+        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #sound, #wifi, #dropbox, #life, #snake)
         with TabbedContent(initial=f"{self.mode}-mode", id="modes"):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):
                     yield view(self.config)
-        # Under every tab: where the tab's data comes from, if it says, then a rule and Close on the left
+        # Under every tab: where the tab's data comes from, if it says, then a rule, Close on the left and
+        # Help on the right; a message takes Help's place while it shows
         with Vertical(id="app-footer"):
             with Horizontal(id="mode-credit"):
                 yield Static("", classes="spacer")
@@ -87,9 +110,20 @@ class OutilsApp(BaseApp):
                 link.can_focus = False  # A click must not pull focus off the mode and its keys
                 yield link
             with Horizontal(id="app-footer-bar"):
-                close = Button("Close", id="btn-close")
-                close.can_focus = False  # A click must not pull focus off the mode and its keys
-                yield close
+                for label, button_id in (("Close", "btn-close"), ("Help", "btn-help")):
+                    button = Button(label, id=button_id)
+                    button.can_focus = False  # A click must not pull focus off the mode and its keys
+                    yield button
+                yield FooterMessage()
+
+    @on(Button.Pressed, "#btn-help")
+    def _help(self, event: Button.Pressed) -> None:
+        event.stop()
+        self.action_help()
+
+    def action_help(self) -> None:
+        # The keys every tab shares, then this tab's own under its name
+        self.push_screen(OutilsHelpScreen(MODES[self.mode][0]))
 
     @on(Button.Pressed, "#btn-close")
     def _close(self, event: Button.Pressed) -> None:

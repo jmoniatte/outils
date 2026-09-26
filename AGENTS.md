@@ -1,7 +1,7 @@
 # outils
 
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
-`outils weather`, `outils ip`, `outils dropbox`, `outils sound`, `outils wifi`, `outils life` or `outils snake` says which tab it opens on.
+`outils weather`, `outils ip`, `outils sound`, `outils wifi`, `outils dropbox`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
 The calendar shows this month and the next; the time, the time now in a few places and an epoch converter; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
@@ -11,10 +11,11 @@ NetworkManager's `nmcli`. Life, for fun,
 runs Conway's Game of Life, and Snake is the game of snake.
 
 It is built on [tui-kit](https://github.com/jmoniatte/tui-kit), shared with flotte
-and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
+and yafyaf-tui: the themes and the picker (`t`), the messages, Help (`?`), the
 dialogs and the startup check all come from there. Put what every app would use
 in tui-kit, not here; see its AGENTS.md. Like the other apps it draws no border around the
-screen, and every message, errors included, goes to the header.
+screen. Unlike them it has no title bar (tui-kit's `AppHeader`): the tabs are the first row, and
+every message, errors included, goes to the footer, in Help's place (see Modes).
 
 ## Rules
 
@@ -32,9 +33,9 @@ outils            # the calendar
 outils time
 outils weather
 outils ip
-outils dropbox
 outils sound
 outils wifi
+outils dropbox
 outils life
 outils snake
 ```
@@ -71,7 +72,7 @@ the commented-out `../tui-kit` path.
 ```
 outils/                 # git root + pyproject.toml (run uv commands here)
   outils/               # Python package
-    app.py              # OutilsApp, a tui-kit BaseApp: MODES, the header, the keys
+    app.py              # OutilsApp, a tui-kit BaseApp: MODES, the footer and its messages, the keys
     __main__.py         # The command line: which tab to open on
     config.py           # Optional ~/.config/outils/config.yaml (theme, through tui_kit.config; week_start,
                         # clocks, location, units)
@@ -89,7 +90,7 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     status_bar.py       # Signals i3blocks after a sound change so its volume block redraws
     nmcli.py            # Every nmcli call and the parsing of its terse output; no Textual
     qr.py               # A Wi-Fi network's QR code, drawn in half blocks (segno); no Textual
-    screens/            # The Wi-Fi tab's panels: details and share (tui-kit PanelScreens) and the password
+    screens/            # Help, and the Wi-Fi tab's panels: details and share (tui-kit PanelScreens), the password, and the QR code alone
     widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py,
                         # dropbox_view.py, sound_view.py, wifi_view.py, life_view.py, snake_view.py);
                         # device_card.py is one sound device on one line, networks_table.py a Wi-Fi list;
@@ -100,7 +101,7 @@ outils/                 # git root + pyproject.toml (run uv commands here)
 
 ## Modes
 
-Each mode is a tab of the `#modes` `TabbedContent`, under the header; the command line picks the
+Each mode is a tab of the `#modes` `TabbedContent`, the first row; the command line picks the
 one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
 the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
 The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
@@ -117,11 +118,14 @@ calendar makes no request. The panes are `<mode>-mode`, not the view's own id, w
 would break.
 
 Every tab sits over the same footer: `OutilsApp.compose` adds `#app-footer`, docked at the
-bottom, a rule like the header's (`border-top`) over a Close button on the left that quits.
+bottom, a rule (`border-top`) over Close, which quits, on the left, and Help, which opens the
+shortcuts (as `?` does), on the right (`dock: right`). tui-kit shows messages in whatever `HeaderNotification` the screen holds, so
+the footer holds one, `FooterMessage`: while a message shows, it takes Help's place, right-aligned
+over the rest of the line (an error wraps onto up to three lines), and Help comes back once it clears.
 A view with a `CREDIT`, its words and its site's URL, has it shown in grey at the right, over
 the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlined on hover like
-every link: "Weather data by open-meteo.com"
-(its CC BY 4.0 license asks for it) and "IP data by ipinfo.io". A view with a `footnote`
+every link: "Data by open-meteo.com" on the Weather tab
+(its CC BY 4.0 license asks for it) and "Data by ipinfo.io" on the IP tab. A view with a `footnote`
 instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
 September 24, 2026"). Time, Dropbox, Sound, Wi-Fi, Life and Snake have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
@@ -130,8 +134,12 @@ Close cannot take focus, so a click leaves the mode's keys working. App tests pa
 `pactl.mixer` and `bluetooth.headsets` so none runs `pactl` or `bluetoothctl`, and the
 `nmcli` functions so none runs `nmcli`.
 `MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
-the first one is the default. Help lists the view's own `BINDINGS` (`HELP_BINDINGS` is set when
-its tab shows) before the app's. A new mode is a view in `widgets/` and an entry in `MODES`;
+the first one is the default. Help (`OutilsHelpScreen`, `screens/help_screen.py`, tui-kit's with
+two columns of outils' own) lists the app's keys under General on the left, and the tab's own on
+the right under the tab's name: the view's `BINDINGS`, or its `HELP_BINDINGS` when it has more
+(`OutilsApp.HELP_BINDINGS`, set when its tab shows), of either group. Each column is as
+wide as its longest line and at least General's width (`min-width: 24`), so a tab with no keys of
+its own still gets a panel of a fair size. A new mode is a view in `widgets/` and an entry in `MODES`;
 `__main__` offers it on its own.
 
 ## Calendar
@@ -157,19 +165,19 @@ from TCSS through `MonthView`'s component classes, so a theme change repaints th
 `apply_theme` override.
 
 `week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is
-kept as calendar's number (Monday 0). An unknown day is a warning in the header and Monday.
+kept as calendar's number (Monday 0). An unknown day is a warning in the footer and Monday.
 
 ## Time
 
-`TimeView` holds an epoch converter (below) over a `ClocksView`, a row per clock: its name, the time there, its offset from
+`TimeView` holds a `ClocksView` over an epoch converter (below), a row per clock: its name, the time there, its offset from
 UTC in orange (the weather's high temperature color) and, while summer time is in force, Nerd
 Font's sun (the weather tab's) in yellow. The clocks are `clocks` in `config.yaml`, names mapped to IANA time zones in the order shown; the default is
 Portland, Chicago, UTC and Strasbourg. A zone Python's `zoneinfo` does not know is a warning in
-the header and is left out. The view checks the time every second and redraws when the minute
+the footer and is left out. The view checks the time every second and redraws when the minute
 turns; it makes no request.
 
-On top, an Epoch box (a `LookupBox`) converts what Enter finds there; a rule (`#time-rule`) then
-separates it from the clocks. It opens on now,
+Under the clocks and a rule (`#time-rule`), an Epoch box (a `LookupBox`) converts what Enter
+finds there. It opens on now,
 in seconds, and follows it every second (`follow_now`) until it is used: never while the box has
 focus or holds an edit, and not once something typed was converted. The green Now button beside
 the box, shown only while the box is not following now (hidden with `visible`, so it keeps its
@@ -187,7 +195,7 @@ place of the rows, as on the IP tab.
 
 `weather.py` talks to Open-Meteo with the standard library (urllib), no account and no key; its
 calls block, so `ForecastView.load` runs `weather.forecast` in a worker. Failures raise
-`WeatherError`, shown in the view and in the header.
+`WeatherError`, shown in the view and in the footer.
 
 `WeatherView` is a City box over a `ForecastView`. It opens on `location` from `config.yaml`
 (`Portland, OR` by default), and Enter in the box looks up what was typed; the forecast on show
@@ -233,7 +241,7 @@ any field ipinfo.io leaves out (and its `readme` link).
 takes addresses only, so `resolve` turns a host name into one first, with a final dot so the
 system's search domain is not tried (a wildcard there answers for any name). A private or
 reserved address is refused before any request: ipinfo.io only answers `bogon` for it. Failures
-raise `IpInfoError`, shown in red in place of the details and, unlike the other tabs, not in the header. ipinfo.io limits unauthenticated requests
+raise `IpInfoError`, shown in red in place of the details and, unlike the other tabs, not in the footer. ipinfo.io limits unauthenticated requests
 per day, far above what opening a pop-up uses.
 
 ## Dropbox
@@ -250,7 +258,7 @@ runs, Start Dropbox (green) while it is stopped, as `dropbox status` tells. Its 
 does: stop quits the whole app, it does not pause, so nothing syncs until it starts again. It runs
 `dropbox stop` or `dropbox start` in a worker; meanwhile "Starting..." (green) or "Stopping..."
 (red) takes the button's place (`#dropbox-state`, hidden otherwise). A failure goes to the
-header. `dropbox stop` only asks the daemon to quit and returns at once, while `dropbox status`
+footer. `dropbox stop` only asks the daemon to quit and returns at once, while `dropbox status`
 still answers for a few seconds, so `dropbox.stop` waits until it says not running
 (`STOP_TIMEOUT`). `dropbox start` gets no pipes, since the daemon it launches would hold them open and the
 call would never return. With no `dropbox` command, a red line says so in place of the button.
@@ -320,7 +328,7 @@ Volume keys and mute redraw the row at once through `SoundView.replace`, then ru
 `change` worker, then `status_bar.refresh`. `SoundView._pactl_lock` runs pactl calls one at a
 time, so a held key lands in order. Every change and a timer every `REFRESH_SECONDS` reload
 everything, the timer only while the tab shows (`tab_shown` and `tab_hidden`); a pactl failure while
-reloading is shown in the header once, not every 2 seconds (`SoundView._load_error`). `MAX_VOLUME` caps the keys at 100%. Every volume set here is a multiple of `VOLUME_STEP`:
+reloading is shown in the footer once, not every 2 seconds (`SoundView._load_error`). `MAX_VOLUME` caps the keys at 100%. Every volume set here is a multiple of `VOLUME_STEP`:
 the keys go to the next multiple (`step_volume`, so 61% becomes 65% or 60%) and a click on the
 bar rounds to the nearest one. Other programs, and headphones' own buttons, can still leave any
 value; it is shown as it is.
@@ -394,11 +402,16 @@ for it. `WifiView.connecting` holds the SSID being joined; disconnect and forget
 
 `i` (or Enter on the network in use) opens `DetailsScreen` with `nmcli.details()`: `device show`
 for the addresses, plus the `*` row of `wifi list` for the access point, on its Details tab.
-The Password (`p`) and QR code (`c`) tabs come from `ShareTabsScreen`, which calls
-`nmcli.share(uuid)` the first time either is shown: `nmcli -s` reads the profile's key-mgmt and
-password, which NetworkManager gives the session's owner without a prompt. Tab cycles the tabs (the app's `tab` steps aside while a panel is up).
-Enter on the Saved tab opens `ShareScreen`, those two tabs alone, for any profile but the one in
-use (that one gets `DetailsScreen`); connecting is done from Nearby.
+The Password tab (`p`), with a QR code button under the password (`c`), comes from `ShareTabsScreen`,
+which calls `nmcli.share(uuid)` the first time either is asked for: `nmcli -s` reads the
+profile's key-mgmt and password, which NetworkManager gives the session's owner without a
+prompt. Tab cycles the tabs (the app's `tab` steps aside while a panel is up). The code opens
+alone over the whole window (`QrScreen`, closed by any key or a click), "Scan to join" and the
+network's name in blue under it: as a tab of the panel it
+needed about 26 rows, and it was the only reason for a tall pop-up; alone it needs 18 at most
+for a usual network. Enter on the Saved tab opens `ShareScreen`, the Password tab alone, with
+its button, for any profile but the one in use (that one gets `DetailsScreen`); connecting
+is done from Nearby.
 `qr.wifi_qr` builds the standard `WIFI:` text with segno and draws it with half blocks, two rows
 of modules per line. It is drawn in fixed black on white, since a phone camera needs that whatever
 the theme. The password is only read when asked for.

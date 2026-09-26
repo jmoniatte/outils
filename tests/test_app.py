@@ -8,7 +8,7 @@ from tui_kit.help_screen import HelpScreen
 from tui_kit.theme_picker import ThemePicker
 from textual.widgets import TabbedContent
 
-from outils.app import OutilsApp
+from outils.app import FooterMessage, OutilsApp
 from outils.config import Config
 from outils.ipinfo import IpInfoError
 from outils.nmcli import Scan
@@ -18,6 +18,16 @@ from outils.widgets import CalendarView
 
 
 SPEAKERS = Device(SINK, 1, "laptop", "Laptop speakers", 80, False, default=True)
+
+
+def help_keys(app) -> dict[str, list[str]]:
+    """Help's keys by column title: General, then the tab's name in capitals."""
+    return {
+        str(column.query_one(".section-title").render()).replace("GENERAL", "General"): [
+            key.render().plain for key in column.query(".shortcut-key")
+        ]
+        for column in app.screen.query(".shortcuts-section")
+    }
 
 
 class AppTest(unittest.TestCase):
@@ -48,11 +58,13 @@ class AppTest(unittest.TestCase):
         asyncio.run(main())
 
     def test_opens_on_the_mode_named_and_tab_moves_to_the_next(self):
-        for mode in ("calendar", "time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake"):
+        for mode in ("calendar", "time", "weather", "ip", "sound", "wifi", "dropbox", "life", "snake"):
             async def body(app, pilot, mode=mode):
                 tabs = app.query_one("#modes", TabbedContent)
-                self.assertEqual(app.query_one("#app-title").render().plain, "outils")
-                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Dropbox", "Sound", "Wi-Fi", "Life", "Snake"])
+                # No title bar: the tabs are the first row
+                self.assertFalse(app.query("#app-header"))
+                self.assertEqual(tabs.region.y, 0)
+                self.assertEqual([str(tabs.get_tab(f"{name}-mode").label) for name in ("calendar", "time", "weather", "ip", "sound", "wifi", "dropbox", "life", "snake")], ["Calendar", "Time", "Weather", "IP", "Sound", "Wi-Fi", "Dropbox", "Life", "Snake"])
                 self.assertEqual(app.mode, mode)
 
             with self.subTest(mode=mode):
@@ -69,9 +81,9 @@ class AppTest(unittest.TestCase):
                 await app.workers.wait_for_complete()
                 await pilot.pause()
                 shown.append((app.mode, app.focused))
-            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake", "calendar", "time"])
-            # The calendar, Dropbox, Sound's cards, Wi-Fi's list, Life and Snake keep focus for their keys; nothing else takes it, so ?, t and q work
-            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "DropboxView", "DeviceCard", "NetworksTable", "LifeView", "SnakeView", "CalendarView", "NoneType"])
+            self.assertEqual([mode for mode, _ in shown], ["time", "weather", "ip", "sound", "wifi", "dropbox", "life", "snake", "calendar", "time"])
+            # The calendar, Sound's cards, Wi-Fi's list, Dropbox, Life and Snake keep focus for their keys; nothing else takes it, so ?, t and q work
+            self.assertEqual([type(focused).__name__ for _, focused in shown], ["NoneType", "NoneType", "NoneType", "DeviceCard", "NetworksTable", "DropboxView", "LifeView", "SnakeView", "CalendarView", "NoneType"])
             # Hidden, Sound asks pactl no more
             calls = self.mixer.call_count
             await pilot.pause(2.5)
@@ -81,8 +93,9 @@ class AppTest(unittest.TestCase):
             # Help lists the keys of the mode on show, and tab does not switch under it
             await pilot.press("question_mark")
             await pilot.pause()
-            keys = [key.render().plain for key in app.screen.query(".shortcut-key")]
-            self.assertEqual(keys, ["?", "t", "y", "tab", "q"])
+            # Time has no keys of its own: its column is empty, but keeps its width
+            self.assertEqual(help_keys(app), {"General": ["?", "t", "y", "tab", "q"], "TIME": []})
+            self.assertEqual(app.screen.query_one("#shortcuts-time").size.width, 24)
             await pilot.press("tab")
             await pilot.pause()
             self.assertIsInstance(app.screen, HelpScreen)
@@ -95,7 +108,7 @@ class AppTest(unittest.TestCase):
             credit = app.query_one("#mode-credit")
             link = app.query_one("#mode-credit-link")
             self.assertFalse(credit.display)
-            for text, url in (("Weather data by open-meteo.com", "https://open-meteo.com"), ("IP data by ipinfo.io", "https://ipinfo.io")):
+            for text, url in (("Data by open-meteo.com", "https://open-meteo.com"), ("Data by ipinfo.io", "https://ipinfo.io")):
                 await pilot.press("tab")
                 await pilot.pause()
                 self.assertTrue(credit.display)
@@ -155,7 +168,7 @@ class AppTest(unittest.TestCase):
         self.run_app(body, "ip")
 
     def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
-        for mode in ("calendar", "time", "weather", "ip", "dropbox", "sound", "wifi", "life", "snake"):
+        for mode in ("calendar", "time", "weather", "ip", "sound", "wifi", "dropbox", "life", "snake"):
             async def body(app, pilot):
                 footer = app.query_one("#app-footer")
                 close = app.query_one("#btn-close")
@@ -176,19 +189,40 @@ class AppTest(unittest.TestCase):
             await pilot.press("question_mark")
             await pilot.pause()
             self.assertIsInstance(app.screen, HelpScreen)
-            keys = [key.render().plain for key in app.screen.query(".shortcut-key")]
-            self.assertEqual(keys, ["←", "→", "?", "t", "y", "tab", "q"])
+            # The keys every tab shares on the left, the tab's own on the right under its name
+            self.assertEqual(help_keys(app), {"General": ["?", "t", "y", "tab", "q"], "CALENDAR": ["←", "→"]})
+            columns = list(app.screen.query(".shortcuts-section"))
+            self.assertEqual([column.id for column in columns], ["shortcuts-general", "shortcuts-calendar"])
+            self.assertLess(columns[0].region.x, columns[1].region.x)
             await pilot.press("escape", "t")
             await pilot.pause()
             self.assertIsInstance(app.screen, ThemePicker)
 
         self.run_app(body)
 
-    def test_config_warnings_show_in_the_header(self):
+    def test_a_message_takes_helps_place_on_the_right_until_it_clears(self):
         async def body(app, pilot):
-            header = app.query_one("HeaderNotification")
-            self.assertEqual(header.render().plain, "Config file is not valid YAML: oops")
-            self.assertTrue(header.has_class("-warning"))
+            message = app.query_one(FooterMessage)
+            help_button = app.query_one("#btn-help")
+            self.assertEqual(message.render().plain, "Config file is not valid YAML: oops")
+            self.assertTrue(message.has_class("-warning"))
+            self.assertFalse(help_button.display)
+            # On the last row, ending where Help ends, on the right
+            bar = app.query_one("#app-footer-bar")
+            self.assertEqual((message.region.right, message.region.y), (bar.content_region.right, app.size.height - 1))
+            self.assertEqual(message.styles.text_align, "right")
+            message.clear_notification()
+            # Help comes back only once the message is off the screen
+            self.assertFalse(help_button.display)
+            await pilot.pause()
+            await pilot.pause()
+            self.assertTrue(help_button.display)
+            self.assertEqual(help_button.region.right, bar.content_region.right)
+            self.assertFalse(message.display)
+            # Help opens the shortcuts, and never takes focus from the mode
+            await pilot.click("#btn-help")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, HelpScreen)
 
         self.run_app(body, config=Config(warnings=["Config file is not valid YAML: oops"]))
 

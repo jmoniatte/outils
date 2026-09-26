@@ -16,6 +16,7 @@ from outils.config import Config
 from outils.nmcli import Details, Network, NmcliError, Scan, Share
 from outils.qr import wifi_qr
 from outils.screens import DetailsScreen, PasswordScreen, ShareScreen
+from outils.screens.qr_screen import QrScreen
 from outils.widgets import WifiView
 from outils.widgets.networks_table import NetworksTable
 from outils.widgets.wifi_view import LOGIN_PAGE_URL
@@ -52,7 +53,7 @@ async def settle(app: OutilsApp, pilot) -> None:
 
 
 class WifiTest(unittest.TestCase):
-    def run_app(self, body, scan=SCAN, wifi=True, connect=None, details=DETAILS, connectivity="full"):
+    def run_app(self, body, scan=SCAN, wifi=True, connect=None, details=DETAILS, connectivity="full", height=30):
         """Run the app against a fake nmcli; body gets the app, the pilot and the mocks."""
 
         async def main():
@@ -74,7 +75,7 @@ class WifiTest(unittest.TestCase):
                     }.items()
                 }
                 app = OutilsApp("wifi", Config(theme="onedark"))
-                async with app.run_test(size=(110, 30)) as pilot:
+                async with app.run_test(size=(110, height)) as pilot:
                     await settle(app, pilot)
                     await body(app, pilot, mocks)
 
@@ -200,12 +201,12 @@ class WifiTest(unittest.TestCase):
             self.assertEqual([str(saved.get_row_at(row)[1]) for row in range(saved.row_count)], ["Home", "Work", "Old"])
             self.assertEqual(str(saved.get_row_at(2)[3]), "not in range")
 
-            # A saved network not in use shows only its password and QR code, even out of range
+            # A saved network not in use shows only its password and a QR code button, even out of range
             saved.move_cursor(row=2)
             await pilot.press("enter")
             await settle(app, pilot)
             self.assertIsInstance(app.screen, ShareScreen)
-            self.assertEqual([pane.id for pane in app.screen.query(TabPane)], ["password", "qr"])
+            self.assertEqual([pane.id for pane in app.screen.query(TabPane)], ["password"])
             self.assertEqual(str(app.screen.query_one(".share-password").render()), "s3cret")
             mocks["share"].assert_called_once_with("u3")
             mocks["connect"].assert_not_called()
@@ -252,22 +253,52 @@ class WifiTest(unittest.TestCase):
             self.assertEqual(screen.query_one(TabbedContent).active, "password")
             mocks["share"].assert_called_once_with("u1")
             self.assertEqual(str(screen.query_one(".share-password").render()), "s3cret")
-            self.assertEqual(str(screen.query_one(".share-qr").render()), "\n".join(wifi_qr(Share("Home", "sae", "s3cret"))))
 
-            # Tab cycles through all three without reading the password again
+            # Tab cycles through both without reading the password again
             active = []
-            for _ in range(3):
+            for _ in range(2):
                 await pilot.press("tab")
                 await settle(app, pilot)
                 active.append(screen.query_one(TabbedContent).active)
-            self.assertEqual(active, ["qr", "details", "password"])
+            self.assertEqual(active, ["details", "password"])
             self.assertEqual(app.mode, "wifi")
+
+            # The QR code opens alone over the whole window, so a short window fits it; any key closes it
             await pilot.press("c")
             await settle(app, pilot)
-            self.assertEqual(screen.query_one(TabbedContent).active, "qr")
+            self.assertIsInstance(app.screen, QrScreen)
+            code = app.screen.query_one("#qr-code")
+            self.assertEqual(str(code.render()), "\n".join(wifi_qr(Share("Home", "sae", "s3cret"))))
+            self.assertEqual("".join(str(part.render()) for part in app.screen.query("#qr-hint Static")), "Scan to join Home")
+            self.assertEqual(app.screen.query_one("#qr-ssid").styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
+            self.assertTrue(code.region.y >= 0 and app.screen.query_one("#qr-hint").region.bottom <= app.size.height)
             mocks["share"].assert_called_once()
+            await pilot.press("x")
+            await pilot.pause()
+            self.assertIs(app.screen, screen)
 
         self.run_app(body)
+
+    def test_the_qr_button_reads_the_password_first_and_fits_18_rows(self):
+        async def body(app, pilot, mocks):
+            await pilot.press("i")
+            await settle(app, pilot)
+            # The button is on the Password tab, under the password
+            self.assertFalse(app.screen.query_one("#btn-qr").region)
+            await pilot.click("#details-tabs Tab#--content-tab-password")
+            await settle(app, pilot)
+            await pilot.click("#btn-qr")
+            await settle(app, pilot)
+            self.assertIsInstance(app.screen, QrScreen)
+            mocks["share"].assert_called_once_with("u1")
+            self.assertLessEqual(app.screen.query_one("#qr-hint").region.bottom, 18)
+            await pilot.click("#qr-code")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, DetailsScreen)
+            # The button takes no focus, so it comes back drawn as before, one background
+            self.assertFalse(app.screen.query_one("#btn-qr").has_focus)
+
+        self.run_app(body, height=18)
 
     def test_details_without_a_connection_say_so(self):
         async def body(app, pilot, mocks):
@@ -343,14 +374,15 @@ class WifiTest(unittest.TestCase):
 
         self.run_app(body)
 
-    def test_help_lists_the_wifi_keys_then_the_apps(self):
+    def test_help_lists_the_apps_keys_then_the_wifi_ones(self):
         async def body(app, pilot, mocks):
             await pilot.press("question_mark")
             await pilot.pause()
-            keys = [key.render().plain for key in app.screen.query(".shortcut-key")]
+            keys = [key.render().plain for key in app.screen.query("#shortcuts-wi-fi .shortcut-key")]
             self.assertIn("← →", keys)
-            self.assertEqual(keys[-5:], ["?", "t", "y", "tab", "q"])
             self.assertTrue({"r", "d", "f", "i", "w", "o", "p", "c"} <= set(keys))
+            general = [key.render().plain for key in app.screen.query("#shortcuts-general .shortcut-key")]
+            self.assertEqual(general, ["?", "t", "y", "tab", "q"])
 
         self.run_app(body)
 

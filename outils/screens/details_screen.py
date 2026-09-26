@@ -1,6 +1,6 @@
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Static, TabbedContent, TabPane
+from textual.widgets import Static, TabbedContent, TabPane
 
 from ..nmcli import Details
 from .share_screen import ShareTabsScreen
@@ -25,7 +25,7 @@ def detail_rows(details: Details) -> list[tuple[str, str]]:
 
 
 class DetailsScreen(ShareTabsScreen):
-    """The connection in use, in three tabs: its details, its password, and a QR code to join it from a phone."""
+    """The connection in use, in two tabs, its details and its password, and a QR code to join it from a phone."""
 
     def __init__(self, details: Details) -> None:
         super().__init__(details.uuid)
@@ -43,5 +43,4 @@ class DetailsScreen(ShareTabsScreen):
                             yield Static(value, classes="details-value", markup=False)
                 yield from self.share_panes()
             yield Static("", id="panel-footer-spacer")
-            with Horizontal(id="panel-footer"):
-                yield Button("Close", id="btn-close")
+            yield from self.footer()

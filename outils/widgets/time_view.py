@@ -17,8 +17,8 @@ LABEL = len("Relative") + 2
 
 
 class TimeView(Vertical):
-    """A box that turns an epoch timestamp into a date, or a date into a timestamp, then under a
-    rule the time now in the config's clocks, a row each.
+    """The time now in the config's clocks, a row each, then under a rule a box that turns an epoch
+    timestamp into a date, or a date into a timestamp.
     """
 
     def __init__(self, config: Config) -> None:
@@ -30,6 +30,8 @@ class TimeView(Vertical):
         self.shown = ""
 
     def compose(self) -> ComposeResult:
+        yield ClocksView(self.clocks)
+        yield Rule(id="time-rule")
         with Horizontal(classes="lookup-row", id="epoch-row"):
             yield Static("Epoch", classes="lookup-label")
             yield LookupBox(placeholder="Timestamp or date", id="epoch-input")
@@ -38,8 +40,6 @@ class TimeView(Vertical):
             now.active_effect_duration = 0
             yield now
         yield EpochDetails()
-        yield Rule(id="time-rule")
-        yield ClocksView(self.clocks)
 
     def on_mount(self) -> None:
         # One timer for both, so how far from now is never drawn before now moves on

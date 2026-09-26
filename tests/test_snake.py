@@ -281,7 +281,7 @@ class SnakeModeTest(unittest.TestCase):
                     self.assertIs(app.focused, view)
                     await pilot.press("question_mark")
                     await pilot.pause()
-                    keys = [key.render().plain for key in app.screen.query(".shortcut-key")]
+                    keys = [key.render().plain for key in app.screen.query("#shortcuts-snake .shortcut-key")]
                     self.assertEqual(keys[:6], ["↑ k w", "↓ j s", "← h a", "→ l d", "p space", "r"])
                     await pilot.press("escape", "space")
                     self.assertEqual(view.state, PLAYING)
