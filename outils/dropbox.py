@@ -19,7 +19,7 @@ COMMAND = "dropbox"
 INFO_FILE = Path.home() / ".dropbox" / "info.json"
 DEFAULT_FOLDER = Path.home() / "Dropbox"
 # How many of the files changed last the view lists
-RECENT = 20
+RECENT = 200
 TIMEOUT = 10
 # dropbox start waits up to a minute for the daemon
 START_TIMEOUT = 90

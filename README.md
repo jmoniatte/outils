@@ -25,7 +25,7 @@ The IP mode shows the public (WAN) address this computer reaches the internet fr
 location, time zone and network. It needs no account. Click the IP box, type another address or
 a host name and press Enter to look it up; an empty box goes back to this computer's address.
 
-The Dropbox tab shows the files that changed last in the Dropbox folder, the latest first. Over
+The Dropbox tab shows the 200 files that changed last in the Dropbox folder, the latest first. Over
 the list, on the right, it shows whether the Dropbox app on this computer is running, with a **Stop Dropbox**
 or **Start Dropbox** button (stop quits the app, so nothing syncs until you start it again). `↑` and `↓` or the mouse select a file, and
 Enter or a click opens it. It needs the `dropbox` command, and asks it only while the tab shows.

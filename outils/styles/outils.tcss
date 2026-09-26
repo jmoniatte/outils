@@ -407,7 +407,13 @@ LookupBox.-found {
 #dropbox-row {
     height: 1;
     margin-bottom: 1;
-    align-horizontal: right;
+}
+
+/* Takes the room left, so the button stays on the right */
+#dropbox-title {
+    width: 1fr;
+    color: $fg;
+    text-style: bold;
 }
 
 #dropbox-state {

@@ -16,7 +16,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Static
 
 from ..config import Config
-from ..dropbox import MISSING, RUNNING, STOPPED, DropboxError, RecentFile, folder, open_file, recent, start, state, status, stop
+from ..dropbox import MISSING, RECENT, RUNNING, STOPPED, DropboxError, RecentFile, folder, open_file, recent, start, state, status, stop
 from ..epoch import relative
 
 # Seconds between two looks at the client and the folder, while the tab shows
@@ -48,8 +48,9 @@ class DropboxView(Vertical, can_focus=True):
         self.busy = False
 
     def compose(self) -> ComposeResult:
-        # Over the list, on the right
+        # Over the list: what it holds on the left, the button on the right
         with Horizontal(id="dropbox-row"):
+            yield Static(f"Last {RECENT} synced files", id="dropbox-title")
             # In place of the button while it is hidden: Starting..., Stopping..., or no dropbox command
             state_label = Static("", id="dropbox-state")
             state_label.display = False

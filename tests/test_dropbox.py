@@ -149,6 +149,7 @@ class DropboxViewTest(unittest.TestCase):
     def test_shows_stop_and_the_latest_files_and_opens_the_one_selected(self):
         async def body(app, pilot):
             self.assertFalse(app.query_one("#dropbox-state").display)
+            self.assertEqual(str(app.query_one("#dropbox-title").render()), "Last 200 synced files")
             toggle = app.query_one("#btn-dropbox-toggle")
             self.assertTrue(toggle.visible)
             self.assertEqual(str(toggle.label), "Stop Dropbox")

@@ -229,11 +229,11 @@ per day, far above what opening a pop-up uses.
 `DropboxView` starts or stops the Dropbox client on this computer, with a button over the right
 end of the list, and shows the files that changed last in the Dropbox folder. It uses only the `dropbox` command (`dropbox.py`, with
 subprocess), which talks to the local daemon: no account and no network. It has no history of
-what synced, so the files are the `RECENT` (20) with the latest modified times under the folder
+what synced, so the files are the `RECENT` (200) with the latest modified times under the folder
 (`~/.dropbox/info.json` names it, `~/Dropbox` by default), skipping the client's `.dropbox` and
 `.dropbox.cache`. A downloaded file keeps the time it was changed elsewhere, not when it synced.
 
-Over the list, on the right, a button that names what it acts on: Stop Dropbox (red) while the client
+Over the list, "Last 200 synced files" (`#dropbox-title`) on the left, and on the right a button that names what it acts on: Stop Dropbox (red) while the client
 runs, Start Dropbox (green) while it is stopped, as `dropbox status` tells. Its tooltip says what it
 does: stop quits the whole app, it does not pause, so nothing syncs until it starts again. It runs
 `dropbox stop` or `dropbox start` in a worker; meanwhile "Starting..." (green) or "Stopping..."
