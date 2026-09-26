@@ -41,6 +41,17 @@ outils snake
 
 It refuses to start unless stdin and stdout are a terminal (tui-kit's `start`).
 
+`outils --show <mode>` starts nothing: it asks an outils already running to show that tab
+(`remote.py`), and exits 0 when it switched, 2 when that tab was on show already, 1 when no outils
+answers. The one started from the command line listens on a Unix socket, `remote.SOCKET`
+(`$XDG_RUNTIME_DIR/outils.sock`), through `asyncio.start_unix_server` in `OutilsApp.on_mount`,
+and removes it on unmount; a second outils finds the first listening and does without
+(`remote.free`), and a socket file left by a crash is removed by the next `--show` or start.
+`OutilsApp.show_mode` closes any panel or dialog, then switches. Tests leave `socket_path` at
+None, so they never listen, except `test_remote.py`, on a temporary path. The status-bar blocks
+call a script in the dotfiles (`i3blocks/scripts/outils-open <mode>`) that shows the pop-up after
+a switch, hides or shows it on the tab already on show, and starts outils when none runs.
+
 ## Test
 
 Run both from the git root.
@@ -70,6 +81,7 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
     life.py             # The Game of Life's rules on a grid that wraps around; no Textual
     snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
+    remote.py           # `outils --show <mode>`: tell an outils already running which tab to show, over a Unix socket; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
     dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
     pactl.py            # Every pactl call and the parsing of its JSON output; no Textual

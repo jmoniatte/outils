@@ -85,7 +85,10 @@ outils life       # opens on the Game of Life
 outils snake      # opens on the game of snake
 ```
 
-Each command opens on its own tab, so a status-bar block can open the one it is about. Click a
+Each command opens on its own tab, so a status-bar block can open the one it is about. With an
+outils already open, `outils --show weather` switches it to that tab instead of starting another;
+it exits 0 when it switched, 2 when that tab was on show already, and 1 when no outils is running,
+so a block's script can show the window, hide it, or start outils. Click a
 tab or press `Tab` to switch. `?` shows the shortcuts, `t` picks a theme, `y` copies the text selected with the mouse, and `q`, `Esc` or the **Close** button at the bottom left quits.
 Click the name in the header to open the shortcuts too.
 

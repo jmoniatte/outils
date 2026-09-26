@@ -3,6 +3,7 @@ import io
 import unittest
 from unittest.mock import patch
 
+from outils import remote
 from outils.__main__ import main
 
 
@@ -30,9 +31,22 @@ class MainTest(unittest.TestCase):
             main(["snake"])
         self.assertEqual([call.args for call in app.call_args_list], [("calendar",), ("time",), ("weather",), ("ip",), ("dropbox",), ("sound",), ("wifi",), ("life",), ("snake",)])
         self.assertEqual(start.call_args.args[0], "outils")
+        # The one started listens for `outils --show`
+        self.assertEqual(app.call_args.kwargs, {"socket_path": remote.SOCKET})
 
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
             main(["sun"])
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_show_asks_the_outils_running_and_starts_none(self) -> None:
+        with (
+            patch("outils.__main__.start") as start,
+            patch("outils.__main__.remote.show", return_value=2) as show,
+            self.assertRaises(SystemExit) as raised,
+        ):
+            main(["weather", "--show"])
+        show.assert_called_once_with("weather")
+        start.assert_not_called()
         self.assertEqual(raised.exception.code, 2)
 
 

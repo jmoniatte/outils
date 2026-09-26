@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import tui_kit
@@ -12,7 +13,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
 from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
-from . import REPOSITORY_URL, __version__
+from . import REPOSITORY_URL, __version__, remote
 from .config import CONFIG_FILE, Config, load_config, save_units
 from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, SoundView, TimeView, WeatherView, WifiView
 
@@ -59,8 +60,11 @@ class OutilsApp(BaseApp):
         Binding("escape", "quit", show=False),
     ]
 
-    def __init__(self, mode: str = DEFAULT_MODE, config: Config | None = None) -> None:
+    def __init__(self, mode: str = DEFAULT_MODE, config: Config | None = None, socket_path: Path | None = None) -> None:
         self.mode = mode
+        # Where to hear `outils --show <mode>` from a status-bar block; None, as in tests, to not listen
+        self.socket_path = socket_path
+        self._server: asyncio.Server | None = None
         self.config = config if config is not None else load_config()
         # The view of the tab on show, told when it hides
         self.shown_view: Widget | None = None
@@ -92,12 +96,36 @@ class OutilsApp(BaseApp):
         event.stop()
         self.exit()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         # The mode keeps focus for its keys; tabs switch by click or with tab
         self.mode_tabs.can_focus = False
         self._show_mode(self.query_one("#modes", TabbedContent).active_pane)
         for warning in self.config.warnings:
             self.notify(warning, severity="warning", timeout=10)
+        if self.socket_path is not None and remote.free(self.socket_path):
+            self._server = await asyncio.start_unix_server(self._show_asked, path=str(self.socket_path))
+
+    async def on_unmount(self) -> None:
+        if self._server is not None:
+            self._server.close()
+            self.socket_path.unlink(missing_ok=True)
+
+    async def _show_asked(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Show the tab `outils --show <mode>` names, and answer whether it was on show already."""
+        mode = (await reader.readline()).decode().strip()
+        if mode in MODES:
+            writer.write(f"{self.show_mode(mode)}\n".encode())
+            await writer.drain()
+        writer.close()
+
+    def show_mode(self, mode: str) -> str:
+        """Close any panel or dialog, then show mode's tab; "same" when it was on show already, else "switched"."""
+        while len(self.screen_stack) > 1:
+            self.pop_screen()
+        if mode == self.mode:
+            return "same"
+        self.query_one("#modes", TabbedContent).active = f"{mode}-mode"
+        return "switched"
 
     @property
     def mode_tabs(self) -> Tabs:
