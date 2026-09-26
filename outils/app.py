@@ -13,7 +13,7 @@ from textual.widgets import Button, Link, Static, TabbedContent, TabPane, Tabs
 
 from . import REPOSITORY_URL, __version__
 from .config import CONFIG_FILE, Config, load_config, save_units
-from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, TimeView, WeatherView
+from .widgets import CalendarView, DropboxView, IpView, LifeView, SnakeView, SoundView, TimeView, WeatherView
 
 STYLES_DIR = Path(__file__).parent / "styles"
 # ouikit's stylesheets first, so the app's own rules win where they differ
@@ -25,6 +25,7 @@ MODES = {
     "weather": ("Weather", WeatherView),
     "ip": ("IP", IpView),
     "dropbox": ("Dropbox", DropboxView),
+    "sound": ("Sound", SoundView),
     "life": ("Life", LifeView),
     "snake": ("Snake", SnakeView),
 }
@@ -36,7 +37,7 @@ def load_stylesheet() -> str:
 
 
 class OutilsApp(BaseApp):
-    """Everyday tools, one tab each: a calendar, clocks, the weather forecast, this computer's public IP, Dropbox's sync, the Game of Life and snake."""
+    """Everyday tools, one tab each: a calendar, clocks, the weather forecast, this computer's public IP, Dropbox's sync, the sound devices, the Game of Life and snake."""
 
     TITLE = "outils"
     VERSION = __version__
@@ -64,7 +65,7 @@ class OutilsApp(BaseApp):
 
     def compose(self) -> ComposeResult:
         yield AppHeader()
-        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #dropbox, #life, #snake)
+        # The panes' ids differ from their views' own (#calendar, #time, #weather, #ip, #dropbox, #sound, #life, #snake)
         with TabbedContent(initial=f"{self.mode}-mode", id="modes"):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):
@@ -109,8 +110,8 @@ class OutilsApp(BaseApp):
     def _show_mode(self, pane: TabPane) -> None:
         self.mode = pane.id.removesuffix("-mode")
         view = pane.children[0]
-        # Help lists the keys of the mode on show, then the app's own
-        self.HELP_BINDINGS = (view.BINDINGS,)
+        # Help lists the keys of the mode on show (a view may give more than its own), then the app's
+        self.HELP_BINDINGS = getattr(view, "HELP_BINDINGS", (view.BINDINGS,))
         # Where the mode's data comes from, with a link, or a line of its own with none
         credit = getattr(view, "CREDIT", None)
         footnote = getattr(view, "footnote", None)
@@ -126,7 +127,8 @@ class OutilsApp(BaseApp):
             link.url = url
         elif footnote:
             label.update(footnote)
-        # The calendar, Dropbox, Life and Snake take focus for their keys; the city box must never take it by itself
+        # The calendar, Dropbox, Life and Snake take focus for their keys; the city box must never take it by itself.
+        # Sound gives it to one of its cards once they are loaded
         if view.can_focus:
             view.focus()
         else:

@@ -489,6 +489,165 @@ LookupBox.-found {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   SOUND - the outputs, a line, then the microphones, a device per row
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#sound {
+    height: 1fr;
+    padding: 0 4 1 4;
+}
+
+#sound-sections {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+    scrollbar-background: $bg;
+    scrollbar-background-hover: $bg;
+    scrollbar-background-active: $bg;
+    scrollbar-color: $gutter;
+    scrollbar-color-hover: $comment;
+    scrollbar-color-active: $comment;
+}
+
+.section-cards {
+    height: auto;
+}
+
+/* The microphones sit under a line, the same as the header's, rather than a title, a blank row under it */
+#inputs-cards {
+    border-top: solid $gutter;
+    padding-top: 1;
+}
+
+/* ─── one device ─────────────────────────────────────────────────────── */
+
+/* One line per device and a blank line between them; the one the keys act on is highlighted */
+DeviceCard {
+    height: 1;
+    margin-bottom: 1;
+}
+
+/* The output and the microphone in use are always highlighted, and so is the row under the
+   mouse or the keys. The highlight covers the name, the figure and the bar, not the buttons,
+   whose own colors would change over it; so the gaps inside that stretch are padding, which
+   takes the background, not margin */
+DeviceCard:focus .card-label,
+DeviceCard:focus .card-volume,
+DeviceCard:focus .card-bar,
+DeviceCard:focus .card-state,
+DeviceCard.-default .card-label,
+DeviceCard.-default .card-volume,
+DeviceCard.-default .card-bar,
+DeviceCard.-default .card-state {
+    background: $bg-light;
+}
+
+/* Takes what the fixed columns on the right leave, up to a limit, so the bars still line up,
+   a narrow window shortens names rather than squashing the buttons, and a wide one does not
+   push the volume far from the name */
+DeviceCard .card-label {
+    width: 1fr;
+    max-width: 36;
+    padding: 0 1;
+}
+
+DeviceCard .card-name {
+    width: auto;
+    max-width: 100%;
+    color: $fg;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The only color a name takes: green for the device in use. Muted or not connected shows
+   in the buttons, so every other name stays plain */
+DeviceCard.-default .card-name {
+    color: $green;
+    text-style: bold;
+}
+
+/* $fg like the percentage: $comment all but vanishes on the highlight */
+DeviceCard .card-battery {
+    width: auto;
+    margin-left: 2;
+    color: $fg;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+DeviceCard .card-volume {
+    width: 7;
+    padding-right: 2;
+    text-align: right;
+    color: $fg;
+}
+
+DeviceCard.-muted .card-volume {
+    color: $comment;
+}
+
+DeviceCard .card-bar {
+    width: 15;
+    padding-right: 1;
+}
+
+DeviceCard .card-bar > .volume-bar--lit {
+    color: $blue;
+}
+
+DeviceCard .card-bar > .volume-bar--unlit {
+    color: $gutter;
+}
+
+DeviceCard.-muted .card-bar > .volume-bar--lit {
+    color: $comment;
+}
+
+DeviceCard .card-state {
+    width: 22;
+    color: $comment;
+}
+
+DeviceCard Button {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    margin: 0 0 0 1;
+    border: none;
+    padding: 0 1;
+    background: $blue 30%;
+    color: $blue;
+}
+
+DeviceCard Button:hover {
+    background: $blue 50%;
+}
+
+DeviceCard Button:disabled {
+    background: $bg-light;
+    color: $comment;
+}
+
+/* As wide as "Unmute", so the Bluetooth buttons line up */
+DeviceCard .btn-mute {
+    width: 10;
+    background: $red 30%;
+    color: $red;
+}
+
+DeviceCard .btn-mute:hover {
+    background: $red 50%;
+}
+
+DeviceCard .btn-mute.-unmute {
+    background: $green 30%;
+    color: $green;
+}
+
+DeviceCard .btn-mute.-unmute:hover {
+    background: $green 50%;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    LIFE - Conway's Game of Life, filling the tab
    ═══════════════════════════════════════════════════════════════════════ */
 

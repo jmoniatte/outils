@@ -1,7 +1,7 @@
 # outils
 
 Everyday tools in the terminal, one tab each: a calendar, clocks, the weather forecast, this
-computer's public IP, the Dropbox client's sync and, for fun, the Game of Life and snake. The calendar
+computer's public IP, the Dropbox client's sync, the sound devices and, for fun, the Game of Life and snake. The calendar
 shows this month and the next side by side like `cal`, with today
 highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
 **Today**, shown once the current month is off screen, comes back to the current month.
@@ -30,6 +30,20 @@ the list, on the right, it shows whether the Dropbox app on this computer is run
 or **Start Dropbox** button (stop quits the app, so nothing syncs until you start it again). `↑` and `↓` or the mouse select a file, and
 Enter or a click opens it. It needs the `dropbox` command, and asks it only while the tab shows.
 
+The Sound tab is a simplified pavucontrol built on `pactl`: pick the output and the microphone,
+and set their volume. It needs `pactl` (PulseAudio, or PipeWire through pipewire-pulse), and
+`bluetoothctl` for Bluetooth headphones. One line per device: first the outputs that are plugged
+in (laptop speakers, a monitor over HDMI or DisplayPort, Bluetooth headphones), then, below a
+line, the microphones. The device in use has its name in green. Click a row to switch to that
+device (what is playing moves onto it), or click its volume bar to set the volume there; each row
+has its own **Mute** / **Unmute** button. Paired Bluetooth headphones stay listed when they are
+not connected: click their row to connect and switch to them, or use **Connect** /
+**Disconnect** (`c`); their battery shows next to their name when they report it. From the
+keyboard, `↑` and `↓` (or `j` and `k`) select a device, Enter uses it, `m` mutes it, and `←`
+and `→` (or `h` and `l`) turn it down or up by 5%, up to 100%. The tab reloads every 2 seconds
+while it shows, and after each change it sends `SIGRTMIN+10` to i3blocks so its volume block
+redraws.
+
 The Life tab runs [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life)
 on a random grid that fills the tab, its edges wrapping around. A grid that settles into still or
 blinking shapes is replaced by a new one after a few seconds; `r` starts a new one at once.
@@ -55,6 +69,7 @@ outils time       # opens on the clocks
 outils weather    # opens on the weather forecast
 outils ip         # opens on this computer's public (WAN) IP address, from ipinfo.io
 outils dropbox    # opens on the Dropbox app's state and the files synced last
+outils sound      # opens on the sound outputs and microphones
 outils life       # opens on the Game of Life
 outils snake      # opens on the game of snake
 ```

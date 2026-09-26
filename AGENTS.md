@@ -1,14 +1,15 @@
 # outils
 
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
-`outils weather`, `outils ip`, `outils dropbox`, `outils life` or `outils snake` says which tab it opens on.
+`outils weather`, `outils ip`, `outils dropbox`, `outils sound`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
 The calendar shows this month and the next; the time, the time now in a few places and an epoch converter; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
-or stops the Dropbox client on this computer and shows the files that changed last. Life, for fun,
+or stops the Dropbox client on this computer and shows the files that changed last; Sound, the
+outputs and microphones through `pactl`, a simplified pavucontrol. Life, for fun,
 runs Conway's Game of Life, and Snake is the game of snake.
 
-It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouie, ouifi, flotte
+It is built on [ouikit](https://github.com/jmoniatte/ouikit), shared with ouifi, flotte
 and yafyaf-tui: the themes and the picker (`t`), the header and its messages, Help (`?`), the
 dialogs and the startup check all come from there. Put what every app would use
 in ouikit, not here; see its AGENTS.md. Like the other apps it draws no border around the
@@ -31,6 +32,7 @@ outils time
 outils weather
 outils ip
 outils dropbox
+outils sound
 outils life
 outils snake
 ```
@@ -68,8 +70,12 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
     dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
+    pactl.py            # Every pactl call and the parsing of its JSON output; no Textual
+    bluetooth.py        # Paired Bluetooth headphones through bluetoothctl, merged into pactl's outputs; no Textual
+    status_bar.py       # Signals i3blocks after a sound change so its volume block redraws
     widgets/            # One view per mode (calendar_view.py, time_view.py, weather_view.py, ip_view.py,
-                        # dropbox_view.py, life_view.py, snake_view.py);
+                        # dropbox_view.py, sound_view.py, life_view.py, snake_view.py);
+                        # device_card.py is one sound device on one line;
                         # month_view.py draws one month, clocks_view.py the time tab's clocks;
                         # lookup_box.py is the box the time, weather and IP tabs type in
     styles/outils.tcss  # outils's own styles, joined after ouikit's (app.STYLE_FILES)
@@ -81,7 +87,8 @@ Each mode is a tab of the `#modes` `TabbedContent`, under the header; the comman
 one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
 the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
 The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
-can take it (the calendar, for its arrows, Dropbox, for its list, Life, for `r`, and Snake, for its keys) and clears it otherwise, so a hidden view never keeps
+can take it (the calendar, for its arrows, Dropbox, for its list, Life, for `r`, and Snake, for its keys) and clears it otherwise
+(Sound then gives it to a card, see below), so a hidden view never keeps
 it. A view must not focus itself: `TabbedContent` switches to the tab of whatever has focus.
 Weather and IP ask their service the first time their tab shows (`on_show`), so opening the
 calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
@@ -94,10 +101,11 @@ the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlin
 every link: "Weather data by open-meteo.com"
 (its CC BY 4.0 license asks for it) and "IP data by ipinfo.io". A view with a `footnote`
 instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
-September 24, 2026"). Time, Dropbox, Life and Snake have neither, so the line is hidden there.
+September 24, 2026"). Time, Dropbox, Sound, Life and Snake have neither, so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
-`dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder.
+`dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder,
+and `pactl.mixer` and `bluetooth.headsets` so none runs `pactl` or `bluetoothctl`.
 `MODES` in `app.py` maps each name the command line takes to its tab label and view widget;
 the first one is the default. Help lists the view's own `BINDINGS` (`HELP_BINDINGS` is set when
 its tab shows) before the app's. A new mode is a view in `widgets/` and an entry in `MODES`;
@@ -183,7 +191,7 @@ in the other units (`ForecastView.location`), and `WeatherView.UnitsChanged` has
 
 `ForecastView` shows the place, the weather now (icon, temperature, words, then feels like,
 wind, humidity and rain), then one row per day for `weather.DAYS` days, today first and the
-others by their full day name. Icons are Nerd Font weather glyphs, as ouie uses Nerd Font
+others by their full day name. Icons are Nerd Font weather glyphs, as the Sound tab uses Nerd Font
 battery icons; a clear night gets the moon. The colors come from TCSS through the view's
 component classes (high orange, low cyan, rain chance blue).
 
@@ -232,6 +240,102 @@ mouse, over a row (it stays when the mouse leaves). It stays on the same file as
 Enter or a single click opens the file with `xdg-open` (`dropbox.open_file`); `ALLOW_SELECT` is
 off, or a double click would select the text of every row. When they do not all fit, the list
 scrolls (`#dropbox-scroll`, with a thin scrollbar), and `↑` and `↓` keep the selected row in sight.
+
+## Sound
+
+The Sound tab came from ouie, a separate app until then (github.com/jmoniatte/ouie),
+which replaced the fzf `audio` script from the dotfiles repo. It keeps what that script did:
+list only plugged-in outputs, move playing streams when the output changes, and signal i3blocks
+(`status_bar.refresh`, signal 10 for the volume block).
+
+`SoundView` (`widgets/sound_view.py`) has no section titles: the outputs (sinks), a line, then
+the microphones (sources), one `DeviceCard` (`widgets/device_card.py`) per device. The line is `#inputs-cards`' top border, so
+it goes with the section when there is no microphone. A card is a single line with a blank line
+after it: the name (green and bold for the device in use, no other marker) and battery, the
+volume figure (grey when muted, no "muted" text) and bar, Mute or Unmute, then Connect /
+Disconnect for headphones. Everything right of the name has a fixed width and the name column
+takes the rest (`1fr`, capped by `max-width`, and never below the longest name, which
+`SoundView.show` sets as its `min-width`), so the bars line up and names are never cut. With
+today's devices that needs about 70 columns. The battery is a Nerd Font level icon and the
+percentage (`battery_text`, `󰁽 40%`); a terminal without a Nerd Font shows a box for the icon.
+It is dropped when it does not fit whole (`DeviceCard._fit_battery`). The Bluetooth button is
+only hidden (`visible`) on wired devices, to keep its column; `SoundView.show` removes the
+column when no headphones are paired. the user tried a two-line card with its own background
+and a colored left edge, and preferred this. The output and microphone in use are always
+highlighted, and so is the focused card, with `$bg-light` over the name, figure and bar only:
+the buttons' `$color 30%` backgrounds would change over it, so the gaps in that stretch are
+padding (which takes the background) rather than margin, and the name column's `min-width`
+counts its padding. `↑` and `↓` (`SoundView.action_move`) go through both sections as one list.
+
+Every action on a device sits on its card, so nothing depends on which
+card has focus. The buttons are real `Button`s that cannot take focus. The highlight
+follows the mouse (`DeviceCard.on_mouse_move` focuses the card), and `DeviceCard.on_click` finds
+what is under the pointer: on the bar a click sets the volume there (`VolumeBar.volume_at`), on
+the rest of the highlight (`HIGHLIGHTED`) it uses the device, and past the buttons it does
+nothing. Bubbled mouse events carry offsets for the widget that first got them, so it works
+from `screen_x`, not `event.x`.
+
+`SoundView.show` updates the cards in place when the same devices are listed, so a reload
+every 2 seconds does not steal focus or flicker; when the list changes, it remounts that
+section's cards and puts focus back on the same device.
+
+`pactl.mixer` reads `pactl --format=json` for `info` (the default sink and source), `sinks` and
+`sources`. `parse_devices` drops a device whose active port reports `not available` (the video
+card lists four HDMI outputs whether a screen is on them or not) and monitor sources. On a
+source `monitor_source` names the sink it listens to; on a sink it names the sink's own monitor,
+so that check only applies to sources. Labels come from `short_label`: a
+Bluetooth device's own description, else `PORT_LABELS` by the active port's type. Two devices
+with the same label get their port description added.
+
+`Device.kind` is the word pactl uses in `set-<kind>-volume`, `set-<kind>-mute` and
+`set-default-<kind>`. `pactl.set_default` also moves every sink-input (or source-output) onto the
+new device, since the default only applies to streams opened afterwards; a source-output
+recording a monitor stays. A device's volume is the mean of its channels; setting it sets every
+channel, so balance is lost.
+
+Volume keys and mute redraw the row at once through `SoundView.replace`, then run pactl in the
+`change` worker, then `status_bar.refresh`. `SoundView._pactl_lock` runs pactl calls one at a
+time, so a held key lands in order. Every change and a timer every `REFRESH_SECONDS` reload
+everything, the timer only while the tab shows (`on_show` and `on_hide`); a pactl failure while
+reloading is shown in the header once, not every 2 seconds (`SoundView._load_error`). `MAX_VOLUME` caps the keys at 100%. Every volume set here is a multiple of `VOLUME_STEP`:
+the keys go to the next multiple (`step_volume`, so 61% becomes 65% or 60%) and a click on the
+bar rounds to the nearest one. Other programs, and headphones' own buttons, can still leave any
+value; it is shown as it is.
+
+A card takes focus only while the tab shows (`SoundView.showing`), since `TabbedContent` would
+switch to the tab of a hidden card with focus; `_show_mode` clears focus, and the first load
+puts it on the output in use. The view gives Help the card's keys as well as its own
+(`SoundView.HELP_BINDINGS`, which `_show_mode` reads when a view has it).
+
+Every `pactl` and `bluetoothctl` call runs in a worker thread through `ouikit.processes.run`.
+Python waits for those threads before it exits, so ouikit's `BaseApp` kills whatever is still
+running when the app unmounts; otherwise quitting during a slow call (a connect can take 20
+seconds) waits for it.
+
+### Bluetooth
+
+`bluetooth.headsets` lists paired devices (`bluetoothctl devices Paired`) and reads each with
+`bluetoothctl info <mac>`; `info` with no address only shows what is connected. Only devices
+whose `Icon` starts with `audio-` are kept, so the mouse is left out. bluetoothctl prints
+failures on stdout, sometimes with exit status 0, so `bluetooth.run` looks for `Failed` too.
+
+`bluetooth.merge` joins them to the outputs by address (`Device.mac`, read by
+`pactl.bluetooth_address` from `api.bluez5.address` or the sink name). A connected headset gets
+its battery on its card. A headset with no sink (not connected, or just connected) gets a card of
+its own with a negative index: `Device.playable` is then False, so the volume keys, mute and
+the bar do nothing on it. Clicking its row, or Enter, connects it and then, once its sink shows
+up (`SoundView._wait_for_sink`), switches to it. The card's Connect / Disconnect button (`c`) connects
+or disconnects. One connect or disconnect runs at a time (`SoundView.bluetooth_busy`), and its
+button reads `Wait...` meanwhile. The i3blocks `audio-route` script also switches to headphones
+when they connect; the two agree, so that is harmless.
+
+Headphones stay in whatever Bluetooth profile they are in: switching between music (A2DP, no
+microphone) and headset (HFP, with microphone) was left out on purpose, as not needed.
+
+Not done yet: a test sound, live updates through `pactl subscribe` instead of polling, and
+pairing new headphones. Pairing works without an interactive session:
+`bluetoothctl --timeout 15 scan on`, then `bluetoothctl --agent NoInputNoOutput pair <mac>`,
+`trust` and `connect`; a device that asks for a PIN would still need `bluetoothctl` itself.
 
 ## Life
 
