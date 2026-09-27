@@ -19,6 +19,15 @@ FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 DAYS = 10
 # An hour with at least this chance of rain, in %, is one it is likely to rain
 RAIN_LIKELY = 40
+# A dry spell shorter than this, in hours, does not split a day's rain in two
+DRY_SPELL = 2
+# At most this many spans of rain, snow or storm a day, so a row fits the pop-up; the shortest dry
+# spells are closed first
+MAX_SPANS = 2
+# A likely hour whose code shows no rain or snow is snow at this temperature (°C) or under, else rain
+SNOW_BELOW = 1.0
+# What a span that joins two kinds becomes: the one that matters most
+SEVERITY = ("rain", "snow", "storm")
 # Where a location, once found, is kept, so opening the pop-up costs one request, not two
 CACHE_FILE = CACHE_DIR / "places.json"
 
@@ -117,6 +126,17 @@ class Hour:
     time: datetime
     # None when Open-Meteo has no chance to give for that hour
     rain_chance: int | None
+    code: int | None
+    temperature: float | None
+
+    @property
+    def kind(self) -> str:
+        """What falls in that hour, "rain", "snow" or "storm", from its code; the code follows the
+        amount expected, not the chance, so a likely hour can have a dry one: then its temperature."""
+        sky = SKIES[WEATHER_CODES[self.code][1]] if self.code in WEATHER_CODES else None
+        if sky in SEVERITY:
+            return sky
+        return "snow" if self.temperature is not None and self.temperature <= SNOW_BELOW else "rain"
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,7 +274,12 @@ def parse_forecast(place: Place, data: dict) -> Forecast:
     ]
     hourly = data["hourly"]
     hours = [
-        Hour(time=datetime.fromisoformat(hourly["time"][i]), rain_chance=hourly["precipitation_probability"][i])
+        Hour(
+            time=datetime.fromisoformat(hourly["time"][i]),
+            rain_chance=hourly["precipitation_probability"][i],
+            code=hourly["weather_code"][i],
+            temperature=hourly["temperature_2m"][i],
+        )
         for i in range(len(hourly["time"]))
     ]
     return Forecast(place, current, days, hours)
@@ -268,31 +293,42 @@ def speed(kmh: float, units: str) -> float:
     return kmh / 1.609344 if units == IMPERIAL else kmh
 
 
-def rain_window(forecast: Forecast, index: int) -> tuple[int | None, int | None] | None:
-    """When it is likely to rain on the forecast's day at index, from its first likely hour to the end
-    of its last, as hours of the day; None for either end when it runs from the start of the day
-    (today: from now) or to its end. None when rain is not likely; a dry spell between two wet ones
-    is not left out.
+def weather_spans(forecast: Forecast, index: int) -> list[tuple[str, int | None, int | None]]:
+    """When rain, snow or a storm is likely on the forecast's day at index, as (kind, start, end)
+    in hours of the day, each span from its first likely hour to the end of its last; None for an
+    end at the start of the day (today: now) or at its end. Empty when none is likely.
     """
     day = forecast.days[index].day
     begun = forecast.current.time.replace(minute=0, second=0, microsecond=0)
     hours = [hour for hour in forecast.hours if hour.time.date() == day and hour.time >= begun]
-    likely = [hour.time.hour for hour in hours if (hour.rain_chance or 0) >= RAIN_LIKELY]
-    if not likely:
-        return None
-    start, end = likely[0], likely[-1] + 1
-    return (None if start == hours[0].time.hour else start, None if end == 24 else end)
+    spans: list[list] = []
+    for hour in hours:
+        if (hour.rain_chance or 0) < RAIN_LIKELY:
+            continue
+        start, kind = hour.time.hour, hour.kind
+        if spans and spans[-1][0] == kind and start - spans[-1][2] < DRY_SPELL:
+            spans[-1][2] = start + 1
+        else:
+            spans.append([kind, start, start + 1])
+    while len(spans) > MAX_SPANS:
+        # The shortest dry spell between two of a kind, else the shortest of all
+        gaps = sorted(range(len(spans) - 1), key=lambda i: (spans[i][0] != spans[i + 1][0], spans[i + 1][1] - spans[i][2]))
+        first, second = spans[gaps[0]], spans.pop(gaps[0] + 1)
+        first[0] = max(first[0], second[0], key=SEVERITY.index)
+        first[2] = second[2]
+    first_hour = hours[0].time.hour if hours else None
+    return [(kind, None if start == first_hour else start, None if end == 24 else end) for kind, start, end in spans]
 
 
 def forecast(location: str) -> Forecast:
-    """The weather now, and for the next DAYS days, today included, with their hours' chance of rain, where location says."""
+    """The weather now, and for the next DAYS days, today included, with their hours' chance of rain, code and temperature, where location says."""
     place = find_place(location)
     params = {
         "latitude": place.latitude,
         "longitude": place.longitude,
         "current": "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min",
-        "hourly": "precipitation_probability",
+        "hourly": "precipitation_probability,weather_code,temperature_2m",
         "timezone": "auto",
         "forecast_days": DAYS,
     }

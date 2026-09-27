@@ -41,6 +41,13 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(len(wrong.warnings), 2)
         self.assertIn("kelvin", wrong.warnings[1])
 
+    def test_locations_are_a_list_and_the_first_opens(self) -> None:
+        cities = self.load("locations:\n  - Portland, OR\n  - ' Chicago, IL '\n  - 42\nlocation: Victoria, BC\n")
+        self.assertEqual((cities.locations, cities.location), (["Portland, OR", "Chicago, IL"], "Portland, OR"))
+        self.assertEqual(cities.warnings, ["locations: '42' is not a place name, such as Victoria, BC"])
+        wrong = self.load("locations: Chicago\n")
+        self.assertEqual((wrong.locations, wrong.warnings), (["Portland, OR"], ["locations: must be a list of place names, such as Victoria, BC"]))
+
     def test_save_units_sets_the_units_that_load_config_reads(self) -> None:
         self.path.parent.mkdir()
         self.path.write_text("theme: nord\nunits: metric\n")

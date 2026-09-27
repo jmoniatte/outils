@@ -77,7 +77,7 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     app.py              # OutilsApp, a tui-kit BaseApp: MODES, the footer and its messages, the keys
     __main__.py         # The command line: which tab to open on
     config.py           # Optional ~/.config/outils/config.yaml (theme, through tui_kit.config; week_start,
-                        # clocks, location, units)
+                        # clocks, locations, units)
     clocks.py           # The time, offset and summer time in an IANA time zone; no Textual
     epoch.py            # Epoch timestamps to dates and back; no Textual
     months.py           # The month grids, shift_month and the day labels; no Textual
@@ -110,7 +110,8 @@ outils/                 # git root + pyproject.toml (run uv commands here)
 
 Each mode is a tab of the `#modes` `TabbedContent`, the first row; the command line picks the
 one it opens on. A click on a tab or `tab` switches; `tab` is an app binding with `priority`, so
-the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up.
+the screen's own `tab` (focus next) never runs, and it is skipped while a panel or dialog is up,
+and while a `LookupBox` has focus, where it takes the box's suggestion (`LookupBox.action_complete`).
 The tabs cannot take focus. When a tab shows, `OutilsApp._show_mode` gives focus to a view that
 can take it (the calendar, for its arrows, Dropbox, for its list, Life, for `r`, and Snake, for its keys) and clears it otherwise,
 so a hidden view never keeps it. A view must not focus itself while hidden: `TabbedContent`
@@ -215,12 +216,18 @@ calls block, so `WeatherView.load` runs `weather.forecast` in a worker. Failures
 `WeatherError`, shown in the view and in the footer; so does an answer of another shape than
 expected, caught around the parsing, not field by field. A cache entry of another shape is asked again.
 
-`WeatherView` is a City box over a `ForecastView`. It opens on `location` from `config.yaml`
-(`Portland, OR` by default), and Enter in the box looks up what was typed; the forecast on show
+`WeatherView` is a City box over a `ForecastView`. It opens on the first of `locations` from
+`config.yaml`, a list of cities (`Portland, OR` alone by default; an old single `location:` is read
+as a list of one, and a bad entry is a warning in the footer and left out). Typing in the box
+completes those cities, the rest in grey (Textual's `SuggestFromList`, case ignored): `→` or `tab` takes it,
+and so does Enter (`WeatherView._saved`), since the `Input` itself would submit only what was typed;
+the box then shows the city in full while it is looked up.
+Enter looks up what was typed otherwise, any city at all; the forecast on show
 stays until the new one comes. A forecast older than `MAX_AGE` (an hour, by wall time so a night's
 suspend counts) is asked again when the tab shows. Once found, the place replaces the text in the box, in full and
 in blue (`LookupBox.show_found`), which is the only place the forecast says where it is for;
-clicking the box turns it back to plain text to type over. The app sets `AUTO_FOCUS = None` so
+clicking the box turns it back to plain text, all selected so typing replaces it (a second click
+places the cursor; `LookupBox`, so the Time and IP boxes do the same). The app sets `AUTO_FOCUS = None` so
 the box never takes focus by itself (it would swallow `?`, `t` and `q`); it has focus only once
 clicked, and lets go after Enter or Escape (a `LookupBox` binding, so Escape there does not
 quit). A typed city is not saved.
@@ -246,20 +253,28 @@ change safely is left as it was, with a warning in the footer).
 icon, temperature and words, then how it feels only when that is `NOTICEABLE` away (3°C, 5°F)
 and the wind only when it is `STRONG_WIND` (30 km/h, 20 mph). What the next days are like: one row
 per day for `weather.DAYS` (10) days, today first and the others by their full day name, a dim
-rule where the names come back to mark next week, with the high
-and the low, then the day's facts in one column, separated by ` · ` (`ForecastView._facts`): when
-it rains, or "Dry" (below); how much warmer or cooler than the day before ("5° cooler", cyan; "6°
-warmer", orange), by the highs and only from `NOTICEABLE` on. The longest ("Rain 10am – 11pm ·
-12° warmer", 29 characters) makes a row of 80 with "Thunderstorm, hail", within the 81 columns
-the tab has in the pop-up (89 by 23: i3 sizes it to 1200 by 800 pixels).
+rule where the names come back to mark next week (up to the change column, so it does not move
+with when it rains), with the high
+and the low, then a column of how much warmer or cooler than the day before (`ForecastView._change`:
+"↑ 6°" orange, "↓ 5°" cyan), by the highs and only from `NOTICEABLE` on, left out when no day has
+one, then when it rains (below), nothing on a dry day. The longest ("Storm 10am–11am, snow 1pm–10pm", 30
+characters) makes a row of 85 with "Thunderstorm, hail", past the 81 columns
+the tab has in the pop-up (89 by 23: i3 sizes it to 1200 by 800 pixels); a row that long is rare.
 The words column is only as wide as the week's longest. And when it will rain: on a
-day it is likely to, the row ends with when, in blue ("Rain 3pm – 9pm", "Rain after 6pm", "Rain
-until 9am", "Rain all day"; `15h` in metric). `weather.rain_window` finds it from the hours' chance
-of rain: from the first hour of `RAIN_LIKELY` (40 %) or more to the end of the last, today counted
-from the hour begun, so a dry spell between two wet ones is not left out. A dry day says "Dry", dim. The days are the forecast's own dates (`timezone=auto`, the place's time
+day it is likely to, the row ends with when, and whether it is rain, snow or a storm ("Rain
+8am–1pm, 6pm–10pm", "Rain 5pm–6pm, snow 8pm–10pm", "Storm until 9am", "Snow all day"; am and pm in
+metric too), the kind said only where it changes, each span in its icon's color (rain blue, snow cyan,
+a storm purple). `weather.weather_spans` finds them from the hours' chance of rain: spans of hours
+of `RAIN_LIKELY` (40 %) or more, today counted from the hour begun. An hour's kind
+(`weather.Hour.kind`) comes from its own weather code, asked with the chance; that code follows
+the amount expected, not the chance, so a likely hour can have a dry one, and is then snow at
+`SNOW_BELOW` (1°C) or under, else rain. A new kind starts a new span; a dry spell shorter than
+`DRY_SPELL` (2 hours) does not split a span of one kind. A day keeps at most `MAX_SPANS` (2): the
+shortest dry spell between two of a kind is closed first, else the shortest of all, the joined
+span taking the kind that matters most (storm, then snow, then rain), so a row stays short. The days are the forecast's own dates (`timezone=auto`, the place's time
 zone), so the first is "Today" there, whatever the date here. Icons are Nerd Font weather glyphs,
 as the Sound tab uses Nerd Font battery icons; a clear night gets the moon. The colors come from
-TCSS through the view's component classes (high orange, low cyan, rain blue), the icons by what
+TCSS through the view's component classes (high orange, low cyan), the icons by what
 they show (`weather.SKIES`): a clear sky, sun or moon, yellow, clouds and fog light grey (`$fg`), rain blue,
 snow cyan, a storm purple.
 

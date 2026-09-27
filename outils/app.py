@@ -18,6 +18,7 @@ from . import REPOSITORY_URL, __version__, remote
 from .click_only import click_only
 from .config import CONFIG_FILE, Config, load_config, save_units
 from .screens import OutilsHelpScreen
+from .widgets.lookup_box import LookupBox
 from .widgets import (
     CalendarView,
     DropboxView,
@@ -188,7 +189,8 @@ class OutilsApp(BaseApp):
             self.notify(warning, severity="warning", timeout=10)
 
     def action_next_mode(self) -> None:
-        if len(self.screen_stack) > 1:
+        # In a box to type in, tab takes the box's suggestion instead
+        if len(self.screen_stack) > 1 or isinstance(self.focused, LookupBox):
             raise SkipAction()
         self.mode_tabs.action_next_tab()
 

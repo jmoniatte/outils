@@ -2,6 +2,7 @@ from collections.abc import Iterable
 
 from rich.style import Style
 from rich.text import Text
+from textual import events
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widget import Widget
@@ -15,13 +16,31 @@ class LookupBox(Input):
     """A box to type what a tab looks up: the time's epoch, the weather's city, the IP's address.
 
     What was found replaces the text, in full and in blue (the -found class), until the box is
-    clicked. It lets go of focus after Enter, which the tab handles, or Escape.
+    clicked. The click that gives it focus selects all its text, so typing replaces it; a second
+    click places the cursor. It lets go of focus after Enter, which the tab handles, or Escape.
     """
 
     BINDINGS = [
         # Only reached while the box has focus; otherwise Escape quits, as everywhere
         Binding("escape", "leave", show=False),
+        # The app's tab, which switches tabs, steps aside while the box has focus
+        Binding("tab", "complete", show=False),
     ]
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # Whether the next click is the one that gives focus
+        self.select_on_click = True
+
+    def _on_mouse_down(self, event: events.MouseDown) -> None:
+        if self.select_on_click:
+            self.select_on_click = False
+            # Input's own handler would put the cursor where clicked, dropping the selection focus made
+            event.prevent_default()
+            self.select_all()
+
+    def on_blur(self) -> None:
+        self.select_on_click = True
 
     def on_focus(self) -> None:
         # Typing: plain text again, the blue is for what was found
@@ -35,6 +54,11 @@ class LookupBox(Input):
         self.value = text
         self.cursor_position = 0
         self.add_class("-found")
+
+    def action_complete(self) -> None:
+        """Take the suggestion shown in grey, if any, as → at the end does."""
+        self.cursor_position = len(self.value)
+        self.action_cursor_right()
 
     def action_leave(self) -> None:
         self.screen.set_focus(None)

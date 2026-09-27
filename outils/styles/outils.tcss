@@ -374,12 +374,8 @@ LookupDetails > .lookup--error {
     color: $cyan;
 }
 
-#forecast > .weather--rain {
-    color: $blue;
-}
-
 /* The icons, by what they show: a clear sky (the sun, or the moon at night) yellow, clouds and fog
-   grey, rain blue, snow cyan, a storm purple */
+   grey, rain blue, snow cyan, a storm purple; the spans of rain, snow or storm too */
 #forecast > .weather--sky-clear {
     color: $yellow;
 }

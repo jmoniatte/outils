@@ -22,14 +22,20 @@ class Config:
     theme: str = TERMINAL_THEME
     # The first column of the calendar, as calendar counts days: Monday is 0, Sunday 6
     week_start: int = 0
-    # Where the weather opens on, as "City" or "City, Region or Country"; the view can look up another
-    location: str = "Portland, OR"
+    # The weather's cities, as "City" or "City, Region or Country": it opens on the first, and the
+    # box completes the others as they are typed; it can look up any other
+    locations: list[str] = field(default_factory=lambda: ["Portland, OR"])
     # metric or imperial
     units: str = METRIC
     # The Time tab's clocks, top to bottom
     clocks: list[Clock] = field(default_factory=lambda: _clocks(DEFAULT_CLOCKS))
     # What in the config file was left out, and why; the footer shows these
     warnings: list[str] = field(default_factory=list)
+
+    @property
+    def location(self) -> str:
+        """Where the weather opens on."""
+        return self.locations[0]
 
 
 def load_config(path: Path = CONFIG_FILE) -> Config:
@@ -82,11 +88,25 @@ def _read_clocks(value: object, config: Config) -> None:
 
 
 def _read_weather(data: Mapping, config: Config) -> None:
-    location = data.get("location")
-    if isinstance(location, str) and location.strip():
-        config.location = location.strip()
-    elif location is not None:
-        config.warnings.append("location: must be a place name, such as Victoria, BC")
+    locations = data.get("locations")
+    if locations is None:
+        # The one location files had before the list
+        location = data.get("location")
+        if isinstance(location, str) and location.strip():
+            config.locations = [location.strip()]
+        elif location is not None:
+            config.warnings.append("location: must be a place name, such as Victoria, BC")
+    elif isinstance(locations, list):
+        names = []
+        for location in locations:
+            if isinstance(location, str) and location.strip():
+                names.append(location.strip())
+            else:
+                config.warnings.append(f"locations: '{location}' is not a place name, such as Victoria, BC")
+        if names:
+            config.locations = names
+    else:
+        config.warnings.append("locations: must be a list of place names, such as Victoria, BC")
     units = data.get("units")
     if units is None:
         return

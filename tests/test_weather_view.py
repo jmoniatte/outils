@@ -12,7 +12,7 @@ from outils.app import OutilsApp
 from outils.config import Config
 from outils.weather import WeatherError, parse_forecast
 from outils.widgets import WeatherView
-from outils.widgets.weather_view import MAX_AGE, ForecastView
+from outils.widgets.weather_view import MAX_AGE, ForecastView, _said
 
 from tests.host import Host, settle
 from tests.test_weather import FORECAST, PLACE
@@ -56,13 +56,36 @@ class WeatherViewTest(unittest.TestCase):
             self.assertTrue(lines[2].startswith("Today"))
             self.assertIn("Light rain", lines[2])
             # Today is dry from now on; no day before it to compare with
-            self.assertTrue(lines[2].endswith("18° /   9°    Dry"))
+            self.assertTrue(lines[2].endswith("18° /   9°"))
             # The days are named from the forecast's own dates, today at the place first; Friday's
             # high is 5° under Thursday's, enough to say
             self.assertTrue(lines[3].startswith("Friday      "))
-            self.assertTrue(lines[3].endswith("13° /  11°    Rain until 3h · 5° cooler"))
+            self.assertTrue(lines[3].endswith("13° /  11°  ↓ 5°  Rain until 3am"))
 
-        self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
+        self.run_view(Config(locations=["Victoria, BC"]), body, return_value=VICTORIA)
+
+    def test_the_rule_before_next_week_stops_before_when_it_rains(self):
+        daily = {
+            "time": [f"2026-10-{day:02}" for day in range(1, 9)],
+            "weather_code": [0] * 8,
+            "temperature_2m_max": [17.0] * 8,
+            "temperature_2m_min": [9.0] * 8,
+        }
+        week = parse_forecast(PLACE, {**FORECAST, "daily": daily})
+
+        async def body(app, pilot, fetch):
+            lines = shown(app)
+            self.assertEqual(lines[2 + 7], "─" * len(lines[2]))
+
+        self.run_view(Config(locations=["Victoria, BC"]), body, return_value=week)
+
+    def test_the_change_column_is_left_out_when_no_day_has_one(self):
+        steady = parse_forecast(PLACE, {**FORECAST, "daily": {**FORECAST["daily"], "temperature_2m_max": [17.6, 17.0]}})
+
+        async def body(app, pilot, fetch):
+            self.assertTrue(shown(app)[3].endswith("17° /  11°    Rain until 3am"))
+
+        self.run_view(Config(locations=["Victoria, BC"]), body, return_value=steady)
 
     def test_how_it_feels_and_the_wind_show_when_they_matter(self):
         windy = parse_forecast(PLACE, {**FORECAST, "current": {**FORECAST["current"], "apparent_temperature": 5.0, "wind_speed_10m": 42.0}})
@@ -70,18 +93,21 @@ class WeatherViewTest(unittest.TestCase):
         async def body(app, pilot, fetch):
             self.assertTrue(shown(app)[0].endswith("Clear   feels like 5° · wind 42 km/h"))
 
-        self.run_view(Config(location="Victoria, BC"), body, return_value=windy)
+        self.run_view(Config(locations=["Victoria, BC"]), body, return_value=windy)
 
     def test_a_city_typed_in_the_box_is_looked_up_and_the_box_lets_go(self):
         async def body(app, pilot, fetch):
             self.assertIsNone(app.focused)
             city = app.query_one("#weather-city", Input)
             self.assertTrue(city.has_class("-found"))
-            await pilot.click("#weather-city")
+            await pilot.click("#weather-city", offset=(10, 0))
             self.assertIs(app.focused, city)
-            # Clicked, it is plain text to type over
+            # Clicked, it is plain text, all selected, so typing replaces it; a second click places the cursor
             self.assertFalse(city.has_class("-found"))
-            city.value = ""
+            self.assertEqual(city.selected_text, city.value)
+            await pilot.click("#weather-city", offset=(10, 0))
+            self.assertEqual(city.selected_text, "")
+            city.select_all()
             await pilot.press(*"Victoria, BC", "enter")
             await settle(app, pilot)
             self.assertEqual(fetch.call_args_list[-1].args, ("Victoria, BC",))
@@ -101,6 +127,30 @@ class WeatherViewTest(unittest.TestCase):
 
         self.run_view(Config(), body, return_value=VICTORIA)
 
+    def test_the_box_completes_the_config_cities_and_enter_takes_them(self):
+        async def body(app, pilot, fetch):
+            city = app.query_one("#weather-city", Input)
+            await pilot.click("#weather-city")
+            city.value = ""
+            # What the box shows while the city is looked up
+            looking_up = []
+            fetch.side_effect = lambda location: looking_up.append(city.value) or VICTORIA
+            await pilot.press(*"chi", "enter")
+            await settle(app, pilot)
+            self.assertEqual(fetch.call_args_list[-1].args, ("Chicago, IL",))
+            self.assertEqual(looking_up, ["Chicago, IL"])
+            # → takes the rest too; anything else is looked up as typed
+            await pilot.click("#weather-city")
+            city.value = ""
+            await pilot.press(*"str", "right")
+            self.assertEqual(city.value, "Strasbourg, FR")
+            city.value = "Tokyo"
+            await pilot.press("enter")
+            await settle(app, pilot)
+            self.assertEqual(fetch.call_args_list[-1].args, ("Tokyo",))
+
+        self.run_view(Config(locations=["Victoria, BC", "Chicago, IL", "Strasbourg, FR"]), body, return_value=VICTORIA)
+
     def test_c_and_f_switch_the_units_the_one_in_use_in_blue(self):
         async def body(app, pilot, fetch):
             celsius, fahrenheit = app.query_one("#units-metric"), app.query_one("#units-imperial")
@@ -117,7 +167,7 @@ class WeatherViewTest(unittest.TestCase):
             self.assertIn(" 64° ", shown(app)[2])
             self.assertIsNone(app.focused)
 
-        self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
+        self.run_view(Config(locations=["Victoria, BC"]), body, return_value=VICTORIA)
 
     def test_a_forecast_older_than_max_age_is_asked_again_when_the_tab_shows(self):
         async def body(app, pilot, fetch):
@@ -130,14 +180,27 @@ class WeatherViewTest(unittest.TestCase):
                 await settle(app, pilot)
             self.assertEqual(fetch.call_args_list, [call("Victoria, BC")] * 2)
 
-        self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
+        self.run_view(Config(locations=["Victoria, BC"]), body, return_value=VICTORIA)
 
     def test_an_error_shows_in_the_view_and_the_footer(self):
         async def body(app, pilot, fetch):
             self.assertEqual(shown(app), ["Cannot reach Open-Meteo: no network"])
             self.assertEqual(app.messages, ["Cannot reach Open-Meteo: no network"])
 
-        self.run_view(Config(location="Victoria, BC"), body, side_effect=WeatherError("Cannot reach Open-Meteo: no network"))
+        self.run_view(Config(locations=["Victoria, BC"]), body, side_effect=WeatherError("Cannot reach Open-Meteo: no network"))
+
+
+class SpansTest(unittest.TestCase):
+    def test_each_span_is_said_with_its_kind_where_it_changes(self):
+        def said(spans):
+            return ", ".join(words for kind, words in _said(spans))
+
+        self.assertEqual(said([("rain", 8, 13), ("rain", 18, 22)]), "Rain 8am–1pm, 6pm–10pm")
+        self.assertEqual(said([("rain", 17, 18), ("snow", 20, 22)]), "Rain 5pm–6pm, snow 8pm–10pm")
+        self.assertEqual(said([("storm", None, 9), ("rain", 18, None)]), "Storm until 9am, rain after 6pm")
+        self.assertEqual(said([("rain", 15, 21)]), "Rain 3pm–9pm")
+        self.assertEqual(said([("snow", None, None)]), "Snow all day")
+        self.assertEqual([kind for kind, words in _said([("rain", 1, 2), ("snow", 5, 6)])], ["rain", "snow"])
 
 
 class WeatherModeTest(unittest.TestCase):
@@ -153,6 +216,26 @@ class WeatherModeTest(unittest.TestCase):
                     await pilot.press("question_mark")
                     await pilot.pause()
                     self.assertEqual(type(app.screen).__name__, "OutilsHelpScreen")
+
+        asyncio.run(main())
+
+    def test_tab_in_the_box_takes_the_suggestion_and_switches_tabs_elsewhere(self):
+        async def main():
+            app = OutilsApp("weather", Config(theme="onedark", locations=["Portland, OR", "Corvallis, OR"]))
+            with patch("outils.widgets.weather_view.forecast", return_value=VICTORIA):
+                async with app.run_test(size=(89, 23)) as pilot:
+                    await settle(app, pilot)
+                    city = app.query_one("#weather-city", Input)
+                    await pilot.click("#weather-city")
+                    await pilot.press(*"cor")
+                    await pilot.pause()
+                    await pilot.press("tab")
+                    self.assertEqual((city.value, app.mode, app.focused), ("Corvallis, OR", "weather", city))
+                    # With nothing to take, it stays in the box
+                    await pilot.press("tab")
+                    self.assertEqual((app.mode, app.focused), ("weather", city))
+                    await pilot.press("escape", "tab")
+                    self.assertNotEqual(app.mode, "weather")
 
         asyncio.run(main())
 

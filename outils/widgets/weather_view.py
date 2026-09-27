@@ -7,6 +7,7 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
+from textual.suggester import SuggestFromList
 from textual.widget import Widget
 from textual.widgets import Button, Input
 
@@ -21,17 +22,21 @@ from ..weather import (
     WeatherError,
     describe,
     forecast,
-    rain_window,
     speed,
     temperature,
+    weather_spans,
 )
 from .lookup_box import LookupBox, lookup_row
 
 # The day's label, its icon and words (as wide as the week's longest, and two spaces), then its high
-# and low and its facts. "Wednesday" and three spaces
+# and low, how much it changed, and when it rains. "Wednesday" and three spaces
 DAY_LABEL = 12
-# Between the temperatures and the facts
+# Before when it rains
 GAP = " " * 4
+# "↑ 4°", "↓12°": the change from the day before's high
+CHANGE_WIDTH = 4
+# On each side of the change: its arrow and color set it apart already
+CHANGE_GAP = " " * 2
 # A difference in temperature worth saying, by units (°C, °F): how it feels against what it is,
 # and a day's high against the day before's
 NOTICEABLE = {METRIC: 3, IMPERIAL: 5}
@@ -39,17 +44,20 @@ NOTICEABLE = {METRIC: 3, IMPERIAL: 5}
 STRONG_WIND = {METRIC: 30, IMPERIAL: 20}
 # Days in a week: after that the names come back
 WEEK = 7
+# What each kind of span is called
+KIND_NAMES = {"rain": "Rain", "snow": "Snow", "storm": "Storm"}
 # Seconds a forecast stays on show before the tab, shown again, asks for a new one
 MAX_AGE = 60 * 60
 
 
 class WeatherView(Vertical):
-    """A box to type a city in, then its forecast; it opens on the config's location.
+    """A box to type a city in, then its forecast; it opens on the config's first city.
 
     Once found, the place shows in the box in full and in blue ("Portland, Oregon, United
     States"), so the box says both what to type and where the forecast is for. The box only has
     focus once clicked, so ?, t and q keep working until then, and it lets go after Enter, or
-    Escape. °C and °F beside the box switch the units, the one in use in blue.
+    Escape. Typing completes the config's cities, in grey: → takes the rest, and so does Enter.
+    °C and °F beside the box switch the units, the one in use in blue.
     """
 
     class UnitsChanged(Message):
@@ -73,7 +81,12 @@ class WeatherView(Vertical):
 
     def compose(self) -> ComposeResult:
         buttons = [quick_button(label, f"units-{units}") for units, label in ((METRIC, "°C"), (IMPERIAL, "°F"))]
-        box = LookupBox(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
+        box = LookupBox(
+            self.config.location,
+            placeholder="City, or City, Region or Country",
+            suggester=SuggestFromList(self.config.locations, case_sensitive=False),
+            id="weather-city",
+        )
         yield lookup_row("City", box, Horizontal(*buttons, id="weather-units"))
         yield ForecastView(self.config)
 
@@ -104,9 +117,22 @@ class WeatherView(Vertical):
     @on(Input.Submitted, "#weather-city")
     def _city_submitted(self, event: Input.Submitted) -> None:
         event.stop()
-        city = event.value.strip()
+        typed = event.value.strip()
+        city = self._saved(typed)
+        if city != typed:
+            # The city completed shows in full while it is looked up, until the place found replaces it
+            event.input.value = city
         if city:
             self.load(city)
+
+    def _saved(self, typed: str) -> str:
+        """The config's city that what was typed begins, as the box completes it, so Enter takes
+        what it shows; else what was typed."""
+        if typed:
+            for city in self.config.locations:
+                if city.casefold().startswith(typed.casefold()):
+                    return city
+        return typed
 
     @work(exclusive=True)
     async def load(self, location: str) -> None:
@@ -127,8 +153,8 @@ class WeatherView(Vertical):
 
 
 class ForecastView(Widget):
-    """The weather now, then a row per day, today first, with its facts: when it is likely to rain,
-    how much warmer or cooler than the day before. Where it is for shows in the city box.
+    """The weather now, then a row per day, today first: how much warmer or cooler than the day
+    before, then when rain, snow or a storm is likely. Where it is for shows in the city box.
 
     The colors come from TCSS through the component classes, so a theme change repaints them.
     """
@@ -138,7 +164,6 @@ class ForecastView(Widget):
         "weather--dim",
         "weather--high",
         "weather--low",
-        "weather--rain",
         *(f"weather--sky-{sky}" for sky in set(SKIES.values())),
     }
 
@@ -192,6 +217,8 @@ class ForecastView(Widget):
         units = self.config.units
         # As narrow as the week allows
         description = max(len(describe(day.code)[0]) for day in days) + 2
+        # A column only when some day has a change worth saying
+        changes = [self._change(index) for index in range(len(days))]
         lines = []
         # Today first, then by name: in a list read in order, a name that comes back is plainly the next week's
         for index, day in enumerate(days):
@@ -201,43 +228,61 @@ class ForecastView(Widget):
             line.append(f"{round(temperature(day.high, units)):>3}°", style=self._style("high"))
             line.append(" / ", style=self._style("dim"))
             line.append(f"{round(temperature(day.low, units)):>3}°", style=self._style("low"))
-            line.append(GAP)
-            line.append_text(Text(" · ", style=self._style("dim")).join(self._facts(index)))
+            gap = GAP
+            if any(changes):
+                line.append(CHANGE_GAP)
+                line.append_text(changes[index] or Text(" " * CHANGE_WIDTH))
+                gap = CHANGE_GAP
+            # Every row is as wide up to here, whatever it says after
+            rule = line.cell_len
+            # Nothing on a dry day, as for a day with no change worth saying
+            spans = weather_spans(self.forecast, index)
+            if spans:
+                line.append(gap)
+                line.append_text(self._spans(spans))
             lines.append(line)
-        # A plain rule where the names come back, to mark next week; as wide as the widest row
+        # A plain rule where the names come back, to mark next week; it stops before when it rains,
+        # so it does not change with it
         if len(lines) > WEEK:
-            lines.insert(WEEK, Text("─" * max(line.cell_len for line in lines), style=self._style("dim")))
+            lines.insert(WEEK, Text("─" * rule, style=self._style("dim")))
         return lines
 
-    def _facts(self, index: int) -> list[Text]:
-        """What is worth knowing about the day at index, each in its color: when it rains, or that it
-        is dry; how much warmer or cooler than the day before, when it is noticeable."""
+    def _change(self, index: int) -> Text | None:
+        """How much warmer or cooler the day at index is than the day before, by the highs, when it is
+        noticeable: "↑ 4°" orange, "↓12°" cyan."""
+        if not index:
+            return None
         days, units = self.forecast.days, self.config.units
-        window = rain_window(self.forecast, index)
-        facts = [Text(_rain(window, units), style=self._style("rain")) if window else Text("Dry", style=self._style("dim"))]
-        if index:
-            difference = round(temperature(days[index].high, units)) - round(temperature(days[index - 1].high, units))
-            if abs(difference) >= NOTICEABLE[units]:
-                warmer = difference > 0
-                change = f"{abs(difference)}° {'warmer' if warmer else 'cooler'}"
-                facts.append(Text(change, style=self._style("high" if warmer else "low")))
-        return facts
+        difference = round(temperature(days[index].high, units)) - round(temperature(days[index - 1].high, units))
+        if abs(difference) < NOTICEABLE[units]:
+            return None
+        warmer = difference > 0
+        return Text(f"{'↑' if warmer else '↓'}{abs(difference):>2}°", style=self._style("high" if warmer else "low"))
+
+    def _spans(self, spans: list[tuple[str, int | None, int | None]]) -> Text:
+        """Each span in its kind's color, as its icon is: "Rain 5pm–6pm, snow 8pm–10pm"."""
+        return Text(", ", style=self._style("dim")).join(Text(words, style=self._style(f"sky-{kind}")) for kind, words in _said(spans))
 
 
-def _rain(window: tuple[int | None, int | None], units: str) -> str:
-    """"Rain 3pm – 9pm", "Rain after 6pm", "Rain until 9am" or "Rain all day"."""
-    start, end = window
-    if start is None and end is None:
-        return "Rain all day"
+def _said(spans: list[tuple[str, int | None, int | None]]) -> list[tuple[str, str]]:
+    """Each span's kind and words, the kind said only where it changes: "Rain 8am–1pm", "6pm–10pm",
+    "snow after 11pm"; "Rain all day" for a span over the whole day."""
+    said = []
+    for number, (kind, start, end) in enumerate(spans):
+        name = KIND_NAMES[kind] if number == 0 else KIND_NAMES[kind].lower()
+        when = "all day" if start is None and end is None else _span(start, end)
+        said.append((kind, when if number and kind == spans[number - 1][0] else f"{name} {when}"))
+    return said
+
+
+def _span(start: int | None, end: int | None) -> str:
     if start is None:
-        return f"Rain until {_hour(end, units)}"
+        return f"until {_hour(end)}"
     if end is None:
-        return f"Rain after {_hour(start, units)}"
-    return f"Rain {_hour(start, units)} – {_hour(end, units)}"
+        return f"after {_hour(start)}"
+    return f"{_hour(start)}–{_hour(end)}"
 
 
-def _hour(hour: int, units: str) -> str:
-    """"15h" in metric; "3pm" in imperial, which goes with the 12-hour clock."""
-    if units == METRIC:
-        return f"{hour}h"
+def _hour(hour: int) -> str:
+    """"3pm": the 12-hour clock, whatever the units."""
     return f"{hour % 12 or 12}{'am' if hour < 12 else 'pm'}"
