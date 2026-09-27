@@ -233,19 +233,32 @@ postal code (`REGION_CODES`: "OR", "ME", "QC"). A single word never matches by i
 or "ME" would find Multnomah County. A place's own label ("Portland, Maine, United States"), as
 the box shows it, finds that place again, so Enter on an untouched box is harmless. The result is cached in
 `~/.cache/outils/places.json` (`outils.CACHE_DIR`), keyed by the location text, so opening
-the pop-up costs one request. `units` is `metric` (the default) or `imperial`, passed to
-Open-Meteo, which converts. °C and °F, right of the City box (`#weather-units`, buttons that
-cannot take focus), switch them, the one in use in bold blue: the place on show is asked again
-in the other units (`WeatherView.location`), and `WeatherView.UnitsChanged` has the app write
+the pop-up costs one request. `units` is `metric` (the default) or `imperial`. The forecast is
+always asked in metric and converted when drawn (`weather.temperature`, `weather.speed`), so °C
+and °F, right of the City box (`#weather-units`, buttons that cannot take focus, the one in use in
+bold blue), only redraw it, with no request; `ForecastView` reads the units from the shared
+`Config`. `WeatherView.UnitsChanged` has the app write
 `units:` to `config.yaml` (`config.save_units`, through tui-kit's `save_setting`, as the theme is saved; a file it cannot
 change safely is left as it was, with a warning in the footer).
 
-`ForecastView` shows the weather now (icon, temperature, words, then feels like,
-wind, humidity and rain), then one row per day for `weather.DAYS` days, today first and the
-others by their full day name. The days are the forecast's own dates (`timezone=auto`, the place's
-time zone), so the first is "Today" there, whatever the date here. Icons are Nerd Font weather glyphs, as the Sound tab uses Nerd Font
-battery icons; a clear night gets the moon. The colors come from TCSS through the view's
-component classes (high orange, low cyan, rain chance blue).
+`ForecastView` answers three things, and leaves the rest out. Temperatures are in degrees only
+(`18°`): °C or °F beside the City box says which. What it is like now: one line, the
+icon, temperature and words, then how it feels only when that is `NOTICEABLE` away (3°C, 5°F)
+and the wind only when it is `STRONG_WIND` (30 km/h, 20 mph). What the next days are like: one row
+per day for `weather.DAYS` days, today first and the others by their full day name, with the high
+and the low, then the day's facts in one column, separated by ` · ` (`ForecastView._facts`): when
+it rains, or "Dry" (below); how much warmer or cooler than the day before ("5° cooler", cyan; "6°
+warmer", orange), by the highs and only from `NOTICEABLE` on. The longest ("Rain 10am – 11pm ·
+12° warmer", 29 characters) makes a row of 80 with "Thunderstorm, hail", within the 81 columns
+the tab has in the pop-up (89 by 23: i3 sizes it to 1200 by 800 pixels).
+The words column is only as wide as the week's longest. And when it will rain: on a
+day it is likely to, the row ends with when, in blue ("Rain 3pm – 9pm", "Rain after 6pm", "Rain
+until 9am", "Rain all day"; `15h` in metric). `weather.rain_window` finds it from the hours' chance
+of rain: from the first hour of `RAIN_LIKELY` (40 %) or more to the end of the last, today counted
+from the hour begun, so a dry spell between two wet ones is not left out. A dry day says "Dry", dim. The days are the forecast's own dates (`timezone=auto`, the place's time
+zone), so the first is "Today" there, whatever the date here. Icons are Nerd Font weather glyphs,
+as the Sound tab uses Nerd Font battery icons; a clear night gets the moon. The colors come from
+TCSS through the view's component classes (high orange, low cyan, rain blue).
 
 ## IP
 

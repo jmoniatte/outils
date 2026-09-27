@@ -1,6 +1,7 @@
 import asyncio
 from time import time
 
+from rich.style import Style
 from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
@@ -11,16 +12,30 @@ from textual.widgets import Button, Input
 
 from ..click_only import quick_button
 from ..config import Config
-from ..weather import IMPERIAL, METRIC, UNIT_LABELS, Forecast, WeatherError, describe, forecast
+from ..weather import (
+    IMPERIAL,
+    METRIC,
+    WIND_LABELS,
+    Forecast,
+    WeatherError,
+    describe,
+    forecast,
+    rain_window,
+    speed,
+    temperature,
+)
 from .lookup_box import LookupBox, lookup_row
 
-# The day's label, its icon and words, then its high and low, its chance of rain and how much.
-# "Wednesday" and three spaces
+# The day's label, its icon and words (as wide as the week's longest, and two spaces), then its high
+# and low and its facts. "Wednesday" and three spaces
 DAY_LABEL = 12
-# "Thunderstorm, hail" and four spaces
-DESCRIPTION = 22
-# Between the numbers' columns
-GAP = " " * 5
+# Between the temperatures and the facts
+GAP = " " * 4
+# A difference in temperature worth saying, by units (°C, °F): how it feels against what it is,
+# and a day's high against the day before's
+NOTICEABLE = {METRIC: 3, IMPERIAL: 5}
+# Wind strong enough to be worth saying, by units
+STRONG_WIND = {METRIC: 30, IMPERIAL: 20}
 # Seconds a forecast stays on show before the tab, shown again, asks for a new one
 MAX_AGE = 60 * 60
 
@@ -48,7 +63,7 @@ class WeatherView(Vertical):
     def __init__(self, config: Config) -> None:
         super().__init__(id="weather")
         self.config = config
-        # What was last asked for, so a change of units asks for it again; empty until the tab shows
+        # What was last asked for, asked again once the forecast is old; empty until the tab shows
         self.location = ""
         # When the forecast on show came; wall time, since a night's suspend must count
         self.loaded_at = 0.0
@@ -57,7 +72,7 @@ class WeatherView(Vertical):
         buttons = [quick_button(label, f"units-{units}") for units, label in ((METRIC, "°C"), (IMPERIAL, "°F"))]
         box = LookupBox(self.config.location, placeholder="City, or City, Region or Country", id="weather-city")
         yield lookup_row("City", box, Horizontal(*buttons, id="weather-units"))
-        yield ForecastView()
+        yield ForecastView(self.config)
 
     def on_mount(self) -> None:
         self._show_units()
@@ -74,9 +89,8 @@ class WeatherView(Vertical):
             return
         self.config.units = units
         self._show_units()
-        # Open-Meteo converts: the place on show, asked again in the other units
-        if self.location:
-            self.load(self.location)
+        # The forecast is always metric: only redrawn, never asked again
+        self.query_one(ForecastView).refresh(layout=True)
         self.post_message(self.UnitsChanged(units))
 
     def tab_shown(self) -> None:
@@ -99,7 +113,7 @@ class WeatherView(Vertical):
         if view.forecast is None:
             view.show(None, f"Asking Open-Meteo for the weather in {location}...")
         try:
-            found = await asyncio.to_thread(forecast, location, self.config.units)
+            found = await asyncio.to_thread(forecast, location)
         except WeatherError as error:
             view.show(None, str(error))
             self.app.notify(str(error), severity="error", timeout=10)
@@ -110,7 +124,8 @@ class WeatherView(Vertical):
 
 
 class ForecastView(Widget):
-    """The weather now, then a row per day, today first; where it is for shows in the city box.
+    """The weather now, then a row per day, today first, with its facts: when it is likely to rain,
+    how much warmer or cooler than the day before. Where it is for shows in the city box.
 
     The colors come from TCSS through the component classes, so a theme change repaints them.
     """
@@ -123,8 +138,10 @@ class ForecastView(Widget):
         "weather--rain",
     }
 
-    def __init__(self) -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__(id="forecast")
+        # Read for its units when drawing: °C or °F is only a redraw
+        self.config = config
         self.forecast: Forecast | None = None
         # Shown, dim, while there is no forecast: that it is coming, or why it did not
         self.message = ""
@@ -134,36 +151,82 @@ class ForecastView(Widget):
         self.message = message
         self.refresh(layout=True)
 
-    def _style(self, name: str):
+    def _style(self, name: str) -> Style:
         return self.get_component_rich_style(f"weather--{name}")
 
     def render(self) -> Text:
         if self.forecast is None:
             return Text(self.message, style=self._style("dim"))
-        labels = UNIT_LABELS[self.forecast.units]
+        return Text("\n").join([self._now_line(), Text(), *self._day_lines()])
+
+    def _now_line(self) -> Text:
+        """The weather now on one line; how it feels and the wind only when they matter."""
+        units = self.config.units
         now = self.forecast.current
         words, icon = describe(now.code, now.is_day)
-        text = Text()
-        text.append(f"{icon}   ")
-        text.append(f"{round(now.temperature)}{labels['temperature']}", style=self._style("temperature"))
-        text.append(f"   {words}")
-        details = [
-            f"Feels like {round(now.feels_like)}{labels['temperature']}",
-            f"Wind {round(now.wind)} {labels['wind']}",
-            f"Humidity {now.humidity} %",
-            f"Rain {now.precipitation:g} {labels['precipitation']}",
-        ]
-        text.append("\n    " + "  ·  ".join(details), style=self._style("dim"))
-        text.append("\n")
+        line = Text(f"{icon}   ")
+        # Degrees only, like the rest: °C or °F beside the city says which
+        line.append(f"{round(temperature(now.temperature, units))}°", style=self._style("temperature"))
+        line.append(f"   {words}")
+        extras = []
+        feels_like = temperature(now.feels_like, units)
+        if abs(feels_like - temperature(now.temperature, units)) >= NOTICEABLE[units]:
+            extras.append(f"feels like {round(feels_like)}°")
+        wind = speed(now.wind, units)
+        if wind >= STRONG_WIND[units]:
+            extras.append(f"wind {round(wind)} {WIND_LABELS[units]}")
+        if extras:
+            line.append("   " + " · ".join(extras), style=self._style("dim"))
+        return line
+
+    def _day_lines(self) -> list[Text]:
+        days = self.forecast.days
+        units = self.config.units
+        # As narrow as the week allows
+        description = max(len(describe(day.code)[0]) for day in days) + 2
+        lines = []
         # The first day is today where the place is; a week never repeats a day name, so the name alone is enough
-        for index, day in enumerate(self.forecast.days):
+        for index, day in enumerate(days):
             words, icon = describe(day.code)
             label = f"{day.day:%A}" if index else "Today"
-            text.append(f"\n{label:<{DAY_LABEL}}{icon}   {words:<{DESCRIPTION}}")
-            text.append(f"{round(day.high):>3}°", style=self._style("high"))
-            text.append(" / ", style=self._style("dim"))
-            text.append(f"{round(day.low):>3}°", style=self._style("low"))
-            chance = "  –" if day.rain_chance is None else f"{day.rain_chance:>3}"
-            text.append(f"{GAP}{chance} %", style=self._style("rain"))
-            text.append(f"{GAP}{day.precipitation:>4.1f} {labels['precipitation']}", style=self._style("dim"))
-        return text
+            line = Text(f"{label:<{DAY_LABEL}}{icon}   {words:<{description}}")
+            line.append(f"{round(temperature(day.high, units)):>3}°", style=self._style("high"))
+            line.append(" / ", style=self._style("dim"))
+            line.append(f"{round(temperature(day.low, units)):>3}°", style=self._style("low"))
+            line.append(GAP)
+            line.append_text(Text(" · ", style=self._style("dim")).join(self._facts(index)))
+            lines.append(line)
+        return lines
+
+    def _facts(self, index: int) -> list[Text]:
+        """What is worth knowing about the day at index, each in its color: when it rains, or that it
+        is dry; how much warmer or cooler than the day before, when it is noticeable."""
+        days, units = self.forecast.days, self.config.units
+        window = rain_window(self.forecast, index)
+        facts = [Text(_rain(window, units), style=self._style("rain")) if window else Text("Dry", style=self._style("dim"))]
+        if index:
+            difference = round(temperature(days[index].high, units)) - round(temperature(days[index - 1].high, units))
+            if abs(difference) >= NOTICEABLE[units]:
+                warmer = difference > 0
+                change = f"{abs(difference)}° {'warmer' if warmer else 'cooler'}"
+                facts.append(Text(change, style=self._style("high" if warmer else "low")))
+        return facts
+
+
+def _rain(window: tuple[int | None, int | None], units: str) -> str:
+    """"Rain 3pm – 9pm", "Rain after 6pm", "Rain until 9am" or "Rain all day"."""
+    start, end = window
+    if start is None and end is None:
+        return "Rain all day"
+    if start is None:
+        return f"Rain until {_hour(end, units)}"
+    if end is None:
+        return f"Rain after {_hour(start, units)}"
+    return f"Rain {_hour(start, units)} – {_hour(end, units)}"
+
+
+def _hour(hour: int, units: str) -> str:
+    """"15h" in metric; "3pm" in imperial, which goes with the 12-hour clock."""
+    if units == METRIC:
+        return f"{hour}h"
+    return f"{hour % 12 or 12}{'am' if hour < 12 else 'pm'}"

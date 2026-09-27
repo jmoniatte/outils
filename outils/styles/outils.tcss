@@ -127,41 +127,35 @@ OutilsHelpScreen #shortcuts-general {
     width: 1fr;
 }
 
-#calendar-nav Button {
-    width: auto;
+/* A step back or forward: green, the same width either side, so what sits between them lands in
+   the middle */
+.step-button {
+    /* Room to spare around "← Previous": with none, Textual wraps it and only the arrow shows */
+    width: 14;
     min-width: 0;
     height: 1;
     border: none;
-    padding: 0 2;
-    background: $bg-light;
-    color: $fg;
-}
-
-#calendar-nav Button:hover {
-    background: $gutter;
-}
-
-/* The same width either side, so Today lands in the middle; green, where Today is blue */
-#calendar-nav #btn-previous,
-#calendar-nav #btn-next {
-    /* Room to spare around "← Previous": with none, Textual wraps it and only the arrow shows */
-    width: 14;
     padding: 0 1;
     background: $green 30%;
     color: $green;
 }
 
-#calendar-nav #btn-previous:hover,
-#calendar-nav #btn-next:hover {
+.step-button:hover {
     background: $green 50%;
 }
 
-#calendar-nav #btn-today {
+/* Back to where the steps started */
+.home-button {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    border: none;
+    padding: 0 2;
     background: $blue 30%;
     color: $blue;
 }
 
-#calendar-nav #btn-today:hover {
+.home-button:hover {
     background: $blue 50%;
 }
 
@@ -383,6 +377,7 @@ LookupDetails > .lookup--error {
 #forecast > .weather--rain {
     color: $blue;
 }
+
 
 /* ═══════════════════════════════════════════════════════════════════════
    IP - an address, this computer's by default, then what ipinfo.io knows about it

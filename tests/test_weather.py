@@ -2,13 +2,13 @@ import io
 import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 from outils import weather
-from outils.weather import IMPERIAL, METRIC, Place, WeatherError, describe, find_place, parse_forecast, pick_place
+from outils.weather import IMPERIAL, METRIC, Place, WeatherError, describe, find_place, parse_forecast, pick_place, rain_window
 
 VICTORIA_BRAZIL = {"name": "Vitória", "latitude": -20.3, "longitude": -40.3, "country_code": "BR", "country": "Brazil", "admin1": "Espírito Santo"}
 VICTORIA_BC = {"name": "Victoria", "latitude": 48.4, "longitude": -123.4, "country_code": "CA", "country": "Canada", "admin1": "British Columbia"}
@@ -17,16 +17,18 @@ RESULTS = [VICTORIA_BRAZIL, VICTORIA_BC, VICTORIA_HK]
 PLACE = Place("Victoria", "British Columbia", "Canada", 48.4, -123.4)
 FORECAST = {
     "current": {
-        "temperature_2m": 11.6, "apparent_temperature": 9.2, "relative_humidity_2m": 65,
-        "precipitation": 0.0, "weather_code": 0, "wind_speed_10m": 8.2, "is_day": 0,
+        "temperature_2m": 11.6, "apparent_temperature": 9.2,
+        "time": "2026-09-24T21:15", "weather_code": 0, "wind_speed_10m": 8.2, "is_day": 0,
     },
     "daily": {
         "time": ["2026-09-24", "2026-09-25"],
         "weather_code": [61, 65],
         "temperature_2m_max": [17.6, 13.2],
         "temperature_2m_min": [9.1, 11.3],
-        "precipitation_probability_max": [79, None],
-        "precipitation_sum": [6.5, 19.5],
+    },
+    "hourly": {
+        "time": ["2026-09-24T08:00", "2026-09-24T20:00", "2026-09-24T21:00", "2026-09-24T22:00", "2026-09-25T00:00", "2026-09-25T01:00", "2026-09-25T02:00"],
+        "precipitation_probability": [0, 0, 5, None, 60, 70, 80],
     },
 }
 
@@ -85,18 +87,29 @@ class FindPlaceTest(unittest.TestCase):
 
 class ForecastTest(unittest.TestCase):
     def test_parse_forecast_reads_now_and_every_day(self):
-        result = parse_forecast(PLACE, METRIC, FORECAST)
+        result = parse_forecast(PLACE, FORECAST)
         self.assertEqual((result.current.temperature, result.current.is_day, result.current.code), (11.6, False, 0))
         self.assertEqual([day.day for day in result.days], [date(2026, 9, 24), date(2026, 9, 25)])
-        self.assertEqual([day.rain_chance for day in result.days], [79, None])
         self.assertEqual(result.days[1].high, 13.2)
+        self.assertEqual(result.current.time, datetime(2026, 9, 24, 21, 15))
+        self.assertEqual((result.hours[3].time, result.hours[3].rain_chance), (datetime(2026, 9, 24, 22), None))
 
-    def test_units_reach_open_meteo_and_errors_become_weather_errors(self):
+    def test_rain_is_likely_from_the_first_to_the_last_hour_of_40_percent_or_more(self):
+        result = parse_forecast(PLACE, FORECAST)
+        # Today counts from the hour begun (21:00): 5 % and none given, so not likely
+        self.assertIsNone(rain_window(result, 0))
+        # Likely from midnight, the start of the day, to the end of 2am
+        self.assertEqual(rain_window(result, 1), (None, 3))
+        wetter = parse_forecast(PLACE, {**FORECAST, "hourly": {**FORECAST["hourly"], "precipitation_probability": [0, 0, 50, 90, 0, 70, 0]}})
+        self.assertEqual((rain_window(wetter, 0), rain_window(wetter, 1)), ((None, 23), (1, 2)))
+
+    def test_the_forecast_is_asked_in_metric_and_converted_here_and_errors_become_weather_errors(self):
         with patch("outils.weather.find_place", return_value=PLACE), patch("outils.weather.ask", return_value=FORECAST) as get:
-            weather.forecast("Victoria, BC", IMPERIAL)
-            self.assertEqual(get.call_args.args[1]["temperature_unit"], "fahrenheit")
-            weather.forecast("Victoria, BC", METRIC)
+            weather.forecast("Victoria, BC")
             self.assertNotIn("temperature_unit", get.call_args.args[1])
+        self.assertEqual((weather.temperature(20, IMPERIAL), weather.temperature(20, METRIC)), (68, 20))
+        self.assertAlmostEqual(weather.speed(100, IMPERIAL), 62.14, places=2)
+        self.assertEqual(weather.speed(100, METRIC), 100)
         for failure, message in (
             ({"side_effect": URLError("no network")}, "Cannot reach Open-Meteo: no network"),
             ({"side_effect": HTTPError("u", 400, "Bad", {}, io.BytesIO())}, "Open-Meteo answered 400"),
@@ -113,6 +126,7 @@ class ForecastTest(unittest.TestCase):
             {**FORECAST, "current": {**FORECAST["current"], "temperature_2m": None}},
             {**FORECAST, "daily": {**daily, "weather_code": [61]}},
             {**FORECAST, "daily": {**daily, "time": ["2026-09-24", "tomorrow"]}},
+            {**FORECAST, "hourly": {**FORECAST["hourly"], "precipitation_probability": [0]}},
         ):
             with patch("outils.weather.find_place", return_value=PLACE), patch("outils.weather.ask", return_value=answer):
                 with self.assertRaisesRegex(WeatherError, "answer outils cannot read"):

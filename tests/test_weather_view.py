@@ -10,18 +10,19 @@ from textual.widgets import Input
 
 from outils.app import OutilsApp
 from outils.config import Config
-from outils.weather import IMPERIAL, METRIC, WeatherError, parse_forecast
+from outils.weather import WeatherError, parse_forecast
 from outils.widgets import WeatherView
 from outils.widgets.weather_view import MAX_AGE, ForecastView
 
 from tests.host import Host, settle
 from tests.test_weather import FORECAST, PLACE
 
-VICTORIA = parse_forecast(PLACE, METRIC, FORECAST)
+VICTORIA = parse_forecast(PLACE, FORECAST)
 
 
 def shown(app: App) -> list[str]:
     return [line.rstrip() for line in app.query_one(ForecastView).render().plain.split("\n")]
+
 
 
 class WeatherViewTest(unittest.TestCase):
@@ -29,7 +30,7 @@ class WeatherViewTest(unittest.TestCase):
         async def main():
             app = Host(WeatherView(config))
             with patch("outils.widgets.weather_view.forecast", **patches) as fetch:
-                async with app.run_test(size=(90, 24)) as pilot:
+                async with app.run_test(size=(89, 23)) as pilot:
                     await settle(app, pilot)
                     await body(app, pilot, fetch)
 
@@ -37,24 +38,33 @@ class WeatherViewTest(unittest.TestCase):
 
     def test_shows_the_place_the_weather_now_and_a_row_per_day(self):
         async def body(app, pilot, fetch):
-            fetch.assert_called_once_with("Victoria, BC", METRIC)
+            fetch.assert_called_once_with("Victoria, BC")
             # The place found shows in the box, in full and in blue
             city = app.query_one("#weather-city", Input)
             self.assertEqual(city.value, "Victoria, British Columbia, Canada")
             self.assertTrue(city.has_class("-found"))
             self.assertEqual(city.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
             lines = shown(app)
-            self.assertIn("12°C   Clear", lines[0])
-            self.assertEqual(lines[1], "    Feels like 9°C  ·  Wind 8 km/h  ·  Humidity 65 %  ·  Rain 0 mm")
-            self.assertTrue(lines[3].startswith("Today"))
-            self.assertIn("Light rain", lines[3])
-            self.assertIn("18° /   9°      79 %      6.5 mm", lines[3])
-            # The days are named from the forecast's own dates, today at the place first
-            self.assertTrue(lines[4].startswith("Friday      "))
-            # A day with no chance of rain given shows a dash
-            self.assertIn("  – %", lines[4])
+            # How it feels (2° off) and the wind (8 km/h) are not worth saying
+            self.assertTrue(lines[0].endswith("12°   Clear"))
+            self.assertTrue(lines[2].startswith("Today"))
+            self.assertIn("Light rain", lines[2])
+            # Today is dry from now on; no day before it to compare with
+            self.assertTrue(lines[2].endswith("18° /   9°    Dry"))
+            # The days are named from the forecast's own dates, today at the place first; Friday's
+            # high is 5° under Thursday's, enough to say
+            self.assertTrue(lines[3].startswith("Friday      "))
+            self.assertTrue(lines[3].endswith("13° /  11°    Rain until 3h · 5° cooler"))
 
         self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
+
+    def test_how_it_feels_and_the_wind_show_when_they_matter(self):
+        windy = parse_forecast(PLACE, {**FORECAST, "current": {**FORECAST["current"], "apparent_temperature": 5.0, "wind_speed_10m": 42.0}})
+
+        async def body(app, pilot, fetch):
+            self.assertTrue(shown(app)[0].endswith("Clear   feels like 5° · wind 42 km/h"))
+
+        self.run_view(Config(location="Victoria, BC"), body, return_value=windy)
 
     def test_a_city_typed_in_the_box_is_looked_up_and_the_box_lets_go(self):
         async def body(app, pilot, fetch):
@@ -68,7 +78,7 @@ class WeatherViewTest(unittest.TestCase):
             city.value = ""
             await pilot.press(*"Victoria, BC", "enter")
             await settle(app, pilot)
-            self.assertEqual(fetch.call_args_list[-1].args, ("Victoria, BC", METRIC))
+            self.assertEqual(fetch.call_args_list[-1].args, ("Victoria, BC",))
             self.assertIsNone(app.focused)
             # An empty box asks nothing
             city.value = "  "
@@ -94,17 +104,14 @@ class WeatherViewTest(unittest.TestCase):
             self.assertNotEqual(fahrenheit.styles.color.hex.lower(), blue)
             await pilot.click("#units-imperial")
             await settle(app, pilot)
-            # The same place asked again, in the other units, and the box keeps it
-            self.assertEqual(fetch.call_args_list[-1].args, ("Victoria, BC", IMPERIAL))
+            # Converted here, with no new request: 11.6°C is 53°F, and Thursday's high 64°F
+            self.assertEqual(fetch.call_count, 1)
             self.assertEqual((celsius.has_class("-selected"), fahrenheit.has_class("-selected")), (False, True))
-            self.assertIn("°F", shown(app)[0])
+            self.assertIn("53°", shown(app)[0])
+            self.assertIn(" 64° ", shown(app)[2])
             self.assertIsNone(app.focused)
-            # The one in use asks nothing
-            await pilot.click("#units-imperial")
-            await settle(app, pilot)
-            self.assertEqual(fetch.call_count, 2)
 
-        self.run_view(Config(location="Victoria, BC"), body, side_effect=lambda location, units: parse_forecast(PLACE, units, FORECAST))
+        self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
 
     def test_a_forecast_older_than_max_age_is_asked_again_when_the_tab_shows(self):
         async def body(app, pilot, fetch):
@@ -115,7 +122,7 @@ class WeatherViewTest(unittest.TestCase):
             with patch("outils.widgets.weather_view.time", return_value=time() + MAX_AGE + 1):
                 view.tab_shown()
                 await settle(app, pilot)
-            self.assertEqual(fetch.call_args_list, [call("Victoria, BC", METRIC)] * 2)
+            self.assertEqual(fetch.call_args_list, [call("Victoria, BC")] * 2)
 
         self.run_view(Config(location="Victoria, BC"), body, return_value=VICTORIA)
 
@@ -132,10 +139,10 @@ class WeatherModeTest(unittest.TestCase):
         async def main():
             app = OutilsApp("weather", Config(theme="onedark"))
             with patch("outils.widgets.weather_view.forecast", return_value=VICTORIA) as fetch:
-                async with app.run_test(size=(90, 24)) as pilot:
+                async with app.run_test(size=(89, 23)) as pilot:
                     await settle(app, pilot)
                     # Portland, OR when the config names nowhere
-                    fetch.assert_called_once_with("Portland, OR", METRIC)
+                    fetch.assert_called_once_with("Portland, OR")
                     self.assertIsNone(app.focused)
                     await pilot.press("question_mark")
                     await pilot.pause()
@@ -150,7 +157,7 @@ class WeatherModeTest(unittest.TestCase):
                 config_file.write_text("theme: onedark\nlocation: Victoria, BC\n")
                 app = OutilsApp("weather", Config(theme="onedark"))
                 with patch("outils.widgets.weather_view.forecast", return_value=VICTORIA), patch("outils.app.CONFIG_FILE", config_file):
-                    async with app.run_test(size=(90, 24)) as pilot:
+                    async with app.run_test(size=(89, 23)) as pilot:
                         await settle(app, pilot)
                         await pilot.click("#units-imperial")
                         await settle(app, pilot)

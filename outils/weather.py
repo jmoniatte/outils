@@ -6,7 +6,7 @@ Every call blocks; the app runs them with asyncio.to_thread.
 import json
 import unicodedata
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -16,21 +16,17 @@ from .web import get_json
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 DAYS = 7
+# An hour with at least this chance of rain, in %, is one it is likely to rain
+RAIN_LIKELY = 40
 # Where a location, once found, is kept, so opening the pop-up costs one request, not two
 CACHE_FILE = CACHE_DIR / "places.json"
 
 METRIC = "metric"
 IMPERIAL = "imperial"
 UNITS = (METRIC, IMPERIAL)
-# What Open-Meteo is asked for, and what the view writes after each number
-_UNIT_PARAMS = {
-    METRIC: {},
-    IMPERIAL: {"temperature_unit": "fahrenheit", "wind_speed_unit": "mph", "precipitation_unit": "inch"},
-}
-UNIT_LABELS = {
-    METRIC: {"temperature": "°C", "wind": "km/h", "precipitation": "mm"},
-    IMPERIAL: {"temperature": "°F", "wind": "mph", "precipitation": "in"},
-}
+# What the view writes after a wind speed; a temperature only gets °, and °C or °F beside the city
+# says which
+WIND_LABELS = {METRIC: "km/h", IMPERIAL: "mph"}
 
 # WMO weather codes, as Open-Meteo returns them: (what it says, Nerd Font icon)
 _CLEAR, _PARTLY, _CLOUDY, _FOG = "\U000f0599", "\U000f0595", "\U000f0590", "\U000f0591"
@@ -92,10 +88,10 @@ class Place:
 
 @dataclass(frozen=True, slots=True)
 class Current:
+    # The place's local time
+    time: datetime
     temperature: float
     feels_like: float
-    humidity: int
-    precipitation: float
     wind: float
     code: int
     is_day: bool
@@ -107,17 +103,24 @@ class Day:
     code: int
     high: float
     low: float
-    # None when Open-Meteo has no chance to give for that day
+
+
+@dataclass(frozen=True, slots=True)
+class Hour:
+    # The place's local time
+    time: datetime
+    # None when Open-Meteo has no chance to give for that hour
     rain_chance: int | None
-    precipitation: float
 
 
 @dataclass(frozen=True, slots=True)
 class Forecast:
+    """Always metric, as Open-Meteo gives it by default; `temperature` and `speed` convert."""
+
     place: Place
-    units: str
     current: Current
     days: list[Day]
+    hours: list[Hour]
 
 
 def describe(code: int, is_day: bool = True) -> tuple[str, str]:
@@ -222,14 +225,13 @@ def _read_cache(cache_file: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def parse_forecast(place: Place, units: str, data: dict) -> Forecast:
+def parse_forecast(place: Place, data: dict) -> Forecast:
     now = data["current"]
     # float() and int() also turn a missing value (null) into an error here, not when drawn
     current = Current(
+        time=datetime.fromisoformat(now["time"]),
         temperature=float(now["temperature_2m"]),
         feels_like=float(now["apparent_temperature"]),
-        humidity=int(now["relative_humidity_2m"]),
-        precipitation=float(now["precipitation"]),
         wind=float(now["wind_speed_10m"]),
         code=int(now["weather_code"]),
         is_day=bool(now.get("is_day", 1)),
@@ -241,28 +243,55 @@ def parse_forecast(place: Place, units: str, data: dict) -> Forecast:
             code=int(daily["weather_code"][i]),
             high=float(daily["temperature_2m_max"][i]),
             low=float(daily["temperature_2m_min"][i]),
-            rain_chance=daily["precipitation_probability_max"][i],
-            precipitation=float(daily["precipitation_sum"][i]),
         )
         for i in range(len(daily["time"]))
     ]
-    return Forecast(place, units, current, days)
+    hourly = data["hourly"]
+    hours = [
+        Hour(time=datetime.fromisoformat(hourly["time"][i]), rain_chance=hourly["precipitation_probability"][i])
+        for i in range(len(hourly["time"]))
+    ]
+    return Forecast(place, current, days, hours)
 
 
-def forecast(location: str, units: str = METRIC) -> Forecast:
-    """The weather now and for the next DAYS days, today included, where location says."""
+def temperature(celsius: float, units: str) -> float:
+    return celsius * 9 / 5 + 32 if units == IMPERIAL else celsius
+
+
+def speed(kmh: float, units: str) -> float:
+    return kmh / 1.609344 if units == IMPERIAL else kmh
+
+
+def rain_window(forecast: Forecast, index: int) -> tuple[int | None, int | None] | None:
+    """When it is likely to rain on the forecast's day at index, from its first likely hour to the end
+    of its last, as hours of the day; None for either end when it runs from the start of the day
+    (today: from now) or to its end. None when rain is not likely; a dry spell between two wet ones
+    is not left out.
+    """
+    day = forecast.days[index].day
+    begun = forecast.current.time.replace(minute=0, second=0, microsecond=0)
+    hours = [hour for hour in forecast.hours if hour.time.date() == day and hour.time >= begun]
+    likely = [hour.time.hour for hour in hours if (hour.rain_chance or 0) >= RAIN_LIKELY]
+    if not likely:
+        return None
+    start, end = likely[0], likely[-1] + 1
+    return (None if start == hours[0].time.hour else start, None if end == 24 else end)
+
+
+def forecast(location: str) -> Forecast:
+    """The weather now, and for the next DAYS days, today included, with their hours' chance of rain, where location says."""
     place = find_place(location)
     params = {
         "latitude": place.latitude,
         "longitude": place.longitude,
-        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day",
-        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum",
+        "current": "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+        "hourly": "precipitation_probability",
         "timezone": "auto",
         "forecast_days": DAYS,
-        **_UNIT_PARAMS[units],
     }
     data = ask(FORECAST_URL, params)
     try:
-        return parse_forecast(place, units, data)
+        return parse_forecast(place, data)
     except _UNREADABLE:
         raise WeatherError(_UNREADABLE_MESSAGE) from None
