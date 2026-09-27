@@ -47,6 +47,12 @@ class WeatherViewTest(unittest.TestCase):
             lines = shown(app)
             # How it feels (2° off) and the wind (8 km/h) are not worth saying
             self.assertTrue(lines[0].endswith("12°   Clear"))
+            # Each icon in its sky's color: a clear night's moon yellow, rain blue
+            view = app.query_one(ForecastView)
+            rows = view.render().split("\n")
+            yellow, blue = (app.get_css_variables()[name].lower() for name in ("yellow", "blue"))
+            self.assertEqual(rows[0].get_style_at_offset(app.console, 0).color.triplet.hex, yellow)
+            self.assertEqual(rows[2].get_style_at_offset(app.console, 12).color.triplet.hex, blue)
             self.assertTrue(lines[2].startswith("Today"))
             self.assertIn("Light rain", lines[2])
             # Today is dry from now on; no day before it to compare with

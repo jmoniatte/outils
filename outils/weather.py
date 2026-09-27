@@ -15,7 +15,8 @@ from .web import get_json
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-DAYS = 7
+# Ten: the next weekend in most weeks, and what the pop-up has room for; Open-Meteo gives up to 16
+DAYS = 10
 # An hour with at least this chance of rain, in %, is one it is likely to rain
 RAIN_LIKELY = 40
 # Where a location, once found, is kept, so opening the pop-up costs one request, not two
@@ -32,6 +33,11 @@ WIND_LABELS = {METRIC: "km/h", IMPERIAL: "mph"}
 _CLEAR, _PARTLY, _CLOUDY, _FOG = "\U000f0599", "\U000f0595", "\U000f0590", "\U000f0591"
 _RAIN, _POURING, _SNOW, _STORM = "\U000f0597", "\U000f0596", "\U000f0598", "\U000f0593"
 _NIGHT = "\U000f0594"
+# What each icon shows, which the view colors it by
+SKIES = {
+    _CLEAR: "clear", _PARTLY: "clear", _NIGHT: "clear", _CLOUDY: "cloud", _FOG: "cloud",
+    _RAIN: "rain", _POURING: "rain", _SNOW: "snow", _STORM: "storm",
+}
 WEATHER_CODES = {
     0: ("Clear", _CLEAR),
     1: ("Mostly clear", _PARTLY),

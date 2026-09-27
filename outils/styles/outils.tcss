@@ -378,6 +378,28 @@ LookupDetails > .lookup--error {
     color: $blue;
 }
 
+/* The icons, by what they show: a clear sky (the sun, or the moon at night) yellow, clouds and fog
+   grey, rain blue, snow cyan, a storm purple */
+#forecast > .weather--sky-clear {
+    color: $yellow;
+}
+
+#forecast > .weather--sky-cloud {
+    color: $fg;
+}
+
+#forecast > .weather--sky-rain {
+    color: $blue;
+}
+
+#forecast > .weather--sky-snow {
+    color: $cyan;
+}
+
+#forecast > .weather--sky-storm {
+    color: $purple;
+}
+
 
 /* ═══════════════════════════════════════════════════════════════════════
    IP - an address, this computer's by default, then what ipinfo.io knows about it

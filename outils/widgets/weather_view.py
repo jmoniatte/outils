@@ -15,6 +15,7 @@ from ..config import Config
 from ..weather import (
     IMPERIAL,
     METRIC,
+    SKIES,
     WIND_LABELS,
     Forecast,
     WeatherError,
@@ -36,6 +37,8 @@ GAP = " " * 4
 NOTICEABLE = {METRIC: 3, IMPERIAL: 5}
 # Wind strong enough to be worth saying, by units
 STRONG_WIND = {METRIC: 30, IMPERIAL: 20}
+# Days in a week: after that the names come back
+WEEK = 7
 # Seconds a forecast stays on show before the tab, shown again, asks for a new one
 MAX_AGE = 60 * 60
 
@@ -136,6 +139,7 @@ class ForecastView(Widget):
         "weather--high",
         "weather--low",
         "weather--rain",
+        *(f"weather--sky-{sky}" for sky in set(SKIES.values())),
     }
 
     def __init__(self, config: Config) -> None:
@@ -154,6 +158,10 @@ class ForecastView(Widget):
     def _style(self, name: str) -> Style:
         return self.get_component_rich_style(f"weather--{name}")
 
+    def _icon(self, icon: str) -> Text:
+        """The icon in its sky's color: a yellow sun or moon, blue rain."""
+        return Text(icon, style=self._style(f"sky-{SKIES[icon]}"))
+
     def render(self) -> Text:
         if self.forecast is None:
             return Text(self.message, style=self._style("dim"))
@@ -164,7 +172,7 @@ class ForecastView(Widget):
         units = self.config.units
         now = self.forecast.current
         words, icon = describe(now.code, now.is_day)
-        line = Text(f"{icon}   ")
+        line = self._icon(icon) + Text("   ")
         # Degrees only, like the rest: °C or °F beside the city says which
         line.append(f"{round(temperature(now.temperature, units))}°", style=self._style("temperature"))
         line.append(f"   {words}")
@@ -185,17 +193,20 @@ class ForecastView(Widget):
         # As narrow as the week allows
         description = max(len(describe(day.code)[0]) for day in days) + 2
         lines = []
-        # The first day is today where the place is; a week never repeats a day name, so the name alone is enough
+        # Today first, then by name: in a list read in order, a name that comes back is plainly the next week's
         for index, day in enumerate(days):
             words, icon = describe(day.code)
             label = f"{day.day:%A}" if index else "Today"
-            line = Text(f"{label:<{DAY_LABEL}}{icon}   {words:<{description}}")
+            line = Text(f"{label:<{DAY_LABEL}}") + self._icon(icon) + Text(f"   {words:<{description}}")
             line.append(f"{round(temperature(day.high, units)):>3}°", style=self._style("high"))
             line.append(" / ", style=self._style("dim"))
             line.append(f"{round(temperature(day.low, units)):>3}°", style=self._style("low"))
             line.append(GAP)
             line.append_text(Text(" · ", style=self._style("dim")).join(self._facts(index)))
             lines.append(line)
+        # A plain rule where the names come back, to mark next week; as wide as the widest row
+        if len(lines) > WEEK:
+            lines.insert(WEEK, Text("─" * max(line.cell_len for line in lines), style=self._style("dim")))
         return lines
 
     def _facts(self, index: int) -> list[Text]:

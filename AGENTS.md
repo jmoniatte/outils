@@ -245,7 +245,8 @@ change safely is left as it was, with a warning in the footer).
 (`18°`): °C or °F beside the City box says which. What it is like now: one line, the
 icon, temperature and words, then how it feels only when that is `NOTICEABLE` away (3°C, 5°F)
 and the wind only when it is `STRONG_WIND` (30 km/h, 20 mph). What the next days are like: one row
-per day for `weather.DAYS` days, today first and the others by their full day name, with the high
+per day for `weather.DAYS` (10) days, today first and the others by their full day name, a dim
+rule where the names come back to mark next week, with the high
 and the low, then the day's facts in one column, separated by ` · ` (`ForecastView._facts`): when
 it rains, or "Dry" (below); how much warmer or cooler than the day before ("5° cooler", cyan; "6°
 warmer", orange), by the highs and only from `NOTICEABLE` on. The longest ("Rain 10am – 11pm ·
@@ -258,7 +259,9 @@ of rain: from the first hour of `RAIN_LIKELY` (40 %) or more to the end of the l
 from the hour begun, so a dry spell between two wet ones is not left out. A dry day says "Dry", dim. The days are the forecast's own dates (`timezone=auto`, the place's time
 zone), so the first is "Today" there, whatever the date here. Icons are Nerd Font weather glyphs,
 as the Sound tab uses Nerd Font battery icons; a clear night gets the moon. The colors come from
-TCSS through the view's component classes (high orange, low cyan, rain blue).
+TCSS through the view's component classes (high orange, low cyan, rain blue), the icons by what
+they show (`weather.SKIES`): a clear sky, sun or moon, yellow, clouds and fog light grey (`$fg`), rain blue,
+snow cyan, a storm purple.
 
 ## IP
 
