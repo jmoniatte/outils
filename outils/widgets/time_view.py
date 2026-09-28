@@ -1,7 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
 
-from rich.style import Style
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -9,44 +8,31 @@ from textual.suggester import SuggestFromList
 from textual.widgets import Button, Input, Rule, Static
 
 from ..click_only import quick_button
-from ..clocks import Clock, find_zone, suggested_zones, zone_named
+from ..clocks import Clock, find_zone, local_zone_name, suggested_zones, zone_named
 from ..config import Config
-from ..epoch import LABELS, EpochError, parse, rows, seconds
+from ..epoch import LABELS, EpochError, iso, parse, rows
 from ..weather import WeatherError, find_place
-from .clocks_view import NAME_WIDTH, ClocksView, fit_name
+from .clocks_view import NAME_GAP, NAME_WIDTH, CityClock, ClocksView, fit_name
 from .lookup_box import LookupBox, LookupDetails, completed, lookup_row
 
 
-def find_clock(location: str) -> tuple[Clock, str]:
-    """A clock for location and what its box shows once found: a time zone ("Europe/Paris", "UTC")
-    as it is, with no request, else a city through Open-Meteo, in full. Blocks; a failure is a WeatherError."""
+def find_clock(location: str) -> Clock:
+    """A clock for location: a time zone ("Europe/Paris", "UTC") with no request, else a city
+    through Open-Meteo. Blocks; a failure is a WeatherError."""
     clock = zone_named(location)
     if clock is not None:
-        return clock, clock.zone.key
+        return clock
     place = find_place(location)
     zone = find_zone(place.timezone)
     if zone is None:
         raise WeatherError(f"Open-Meteo gives no time zone for {place.label}")
-    return Clock(place.name, zone), place.label
-
-
-class EpochDetails(LookupDetails):
-    """The epoch's rows, with the In zone's row red when it could not be found; the values line up
-    with the clocks' times, so an In zone's name has room."""
-
-    def __init__(self) -> None:
-        super().__init__(LABELS, id="epoch-details")
-        self.label_width = NAME_WIDTH
-        self.error_row: int | None = None
-
-    def value_style(self, index: int) -> Style | str:
-        return self.get_component_rich_style("lookup--error") if index == self.error_row else ""
+    return Clock(place.name, zone)
 
 
 class TimeView(Vertical):
     """The time now in the config's clocks, a row each, then a row whose name is a box to add a
     city's; then under a rule a box that turns an epoch timestamp into a date, or an ISO 8601 date into
-    a timestamp, with beside it a city or time zone to show the date in as well.
+    a timestamp, the date shown in UTC and here, and in a city or time zone typed in the last row's label.
 
     The city's time zone comes from Open-Meteo's geocoding, as the weather's place does, and is
     cached with it; the box completes the weather's cities. The city is not saved.
@@ -64,26 +50,35 @@ class TimeView(Vertical):
         self.shown = ""
         # What the box names, None when it names nothing
         self.moment: datetime | None = None
-        # The In box's zone, shown as one more row; or in its place that it is being looked up, or why not
+        # The zone typed in the last row, whose value is the moment there
         self.extra: Clock | None = None
-        self.extra_note = ""
-        self.extra_error = False
+        # Local's label: the system's time zone, so it says where here is
+        self.local_label = fit_name(local_zone_name() or "Local")
 
     def compose(self) -> ComposeResult:
-        details = EpochDetails()
+        details = LookupDetails(LABELS, id="epoch-details")
+        # The values under the clocks' times, so a zone's row lines up with them
+        details.label_width = NAME_WIDTH
         yield ClocksView(self.clocks)
         city = LookupBox(
-            placeholder="Add a city or zone",
+            placeholder="City or time zone",
             suggester=SuggestFromList(self.suggestions, case_sensitive=False),
             id="city-input",
         )
-        yield Horizontal(city, ClocksView([], names=False, id="city-clock"), id="city-row")
+        yield Horizontal(self._in_names(city), CityClock(), id="city-row")
         yield Rule(id="time-rule")
         box = LookupBox(placeholder="Timestamp or ISO 8601 date", id="epoch-input")
-        zone = LookupBox(placeholder="City or time zone", suggester=SuggestFromList(self.suggestions, case_sensitive=False), id="zone-input")
-        now = quick_button("Now", "btn-now", "tinted -green")
-        yield lookup_row("Epoch", box, now, Static("In", classes="lookup-label", id="zone-label"), zone, label_width=details.label_width)
+        yield lookup_row("Time", box, quick_button("Now", "btn-now", "tinted -green"), label_width=details.label_width)
         yield details
+        zone = LookupBox(placeholder="City or time zone", suggester=SuggestFromList(self.suggestions, case_sensitive=False), id="zone-input")
+        yield Horizontal(self._in_names(zone), Static("", id="zone-value", markup=False), id="zone-row")
+
+    def _in_names(self, box: LookupBox) -> LookupBox:
+        """box as wide as the name column, less its gap, so what follows it lines up with the times; with no line under it."""
+        box.add_class("in-labels")
+        box.styles.width = NAME_WIDTH - NAME_GAP
+        box.styles.margin = (0, NAME_GAP, 0, 0)
+        return box
 
     def _completed(self, typed: str) -> str:
         """What Enter looks up: the weather city the box completes, or the time zone once a "/" is
@@ -128,7 +123,7 @@ class TimeView(Vertical):
         if not city:
             # An empty box takes the city away
             self.workers.cancel_group(self, "city")
-            self.query_one("#city-clock", ClocksView).show_city(None)
+            self.query_one(CityClock).show(None)
             return
         event.input.value = city
         self.find_city(city)
@@ -136,14 +131,14 @@ class TimeView(Vertical):
     @work(exclusive=True, group="city")
     async def find_city(self, location: str) -> None:
         """Show location's time on the box's row, its short name in the box."""
-        clocks = self.query_one("#city-clock", ClocksView)
-        clocks.show_city(None, f"Looking up {location}...")
+        row = self.query_one(CityClock)
+        row.show(None, f"Looking up {location}...")
         try:
-            clock, _ = await asyncio.to_thread(find_clock, location)
+            clock = await asyncio.to_thread(find_clock, location)
         except WeatherError as error:
-            clocks.show_city(None, str(error), error=True)
+            row.show(None, str(error), error=True)
             return
-        clocks.show_city(clock)
+        row.show(clock)
         self.query_one("#city-input", LookupBox).show_found(clock.name)
 
     @on(Input.Submitted, "#zone-input")
@@ -156,26 +151,32 @@ class TimeView(Vertical):
             event.input.value = location
             self.find_extra(location)
         else:
-            # An empty box takes the row away
-            self._note("")
+            # An empty box leaves the row's value empty
+            self._show_extra()
 
     @work(exclusive=True, group="zone")
     async def find_extra(self, location: str) -> None:
-        """Show the moment in location too, its place in full in the box."""
-        self._note("Looking up...")
+        """Show the moment in location too, the time zone it resolves to in the box."""
+        self._show_extra("Looking up...")
         try:
-            clock, found = await asyncio.to_thread(find_clock, location)
+            clock = await asyncio.to_thread(find_clock, location)
         except WeatherError as error:
-            self._note(str(error), error=True)
+            self._show_extra(str(error), error=True)
             return
         self.extra = clock
-        self.query_one("#zone-input", LookupBox).show_found(found)
-        self._note("")
+        # The zone it resolves to, in blue: the date after it has that zone's offset
+        self.query_one("#zone-input", LookupBox).show_found(clock.zone.key)
+        self._show_extra()
 
-    def _note(self, text: str, error: bool = False) -> None:
-        self.extra_note, self.extra_error = text, error
-        if self.moment is not None:
-            self.measure(datetime.now(UTC))
+    def _show_extra(self, note: str = "", error: bool = False) -> None:
+        """The last row's value: the moment in the zone typed, or else note, red for an error."""
+        value = self.query_one("#zone-value", Static)
+        if note or self.extra is None or self.moment is None:
+            value.update(note)
+        else:
+            value.update(iso(self.moment, self.extra.zone))
+        value.set_class(error, "-error")
+        value.set_class(bool(note) and not error, "-note")
 
     @on(Input.Submitted, "#epoch-input")
     def _submitted(self, event: Input.Submitted) -> None:
@@ -194,18 +195,17 @@ class TimeView(Vertical):
         except EpochError as error:
             self.moment = None
             self.query_one(LookupDetails).show([], str(error))
+            if self.extra is not None:
+                self._show_extra()
             return
-        # Like the IP tab: what was converted, in blue, the seconds for now
-        self.shown = text.strip() or seconds(self.moment)
+        # Like the IP tab: what was converted, in blue; now as the date here, ISO 8601
+        self.shown = text.strip() or iso(self.moment)
         self.query_one("#epoch-input", LookupBox).show_found(self.shown)
         self.measure(now)
 
     def measure(self, now: datetime) -> None:
-        """Show the moment a row each, how far from now measured from now; the In zone's after Local."""
-        details = self.query_one(EpochDetails)
-        found = rows(self.moment, now, extra=(fit_name(self.extra.name), self.extra.zone) if self.extra else None)
-        details.error_row = None
-        if self.extra_note:
-            found.insert(3, ("In", self.extra_note))
-            details.error_row = 3 if self.extra_error else None
-        details.show(found)
+        """Show the moment a row each, how far from now measured from now, and in the zone typed."""
+        found = [(self.local_label if label == "Local" else label, value) for label, value in rows(self.moment, now)]
+        self.query_one(LookupDetails).show(found)
+        if self.extra is not None:
+            self._show_extra()

@@ -196,42 +196,37 @@ MonthView > .month--today {
     height: auto;
 }
 
-ClocksView {
+ClockRows {
     width: auto;
     height: auto;
     color: $fg;
 }
 
-ClocksView > .clocks--time {
+ClockRows > .clocks--time {
     text-style: bold;
 }
 
 /* Orange, like the weather's high temperatures */
-ClocksView > .clocks--offset {
+ClockRows > .clocks--offset {
     color: $orange;
 }
 
-ClocksView > .clocks--dst {
+ClockRows > .clocks--dst {
     color: $yellow;
 }
 
-ClocksView > .clocks--zone,
-ClocksView > .clocks--message {
+ClockRows > .clocks--zone,
+ClockRows > .clocks--message {
     color: $comment;
 }
 
-ClocksView > .clocks--error {
+ClockRows > .clocks--error {
     color: $red;
 }
 
 /* One more clock, its name typed: the box in the name column, the rest of the row found */
 #city-row {
-    height: 2;
-}
-
-#city-input {
-    width: 18;
-    margin-right: 2;
+    height: 1;
 }
 
 /* Room for a timestamp in milliseconds or a date with its offset, 2026-10-02T16:00+02:00; longer
@@ -240,14 +235,23 @@ ClocksView > .clocks--error {
     width: 26;
 }
 
-/* A city or time zone to show the date in too, after Now */
-#zone-label {
-    width: 4;
-    margin-left: 2;
+/* The last row of the epoch's: a city or time zone typed in the label column, the date there in
+   the value's */
+#zone-row {
+    height: 1;
 }
 
-#zone-input {
+#zone-value {
     width: 1fr;
+    color: $fg;
+}
+
+#zone-value.-note {
+    color: $comment;
+}
+
+#zone-value.-error {
+    color: $red;
 }
 
 /* Back to following now; green like the calendar's Previous and Next */
@@ -288,6 +292,14 @@ LookupBox {
 
 LookupBox:focus {
     border-bottom: solid $blue !important;
+}
+
+/* A box in a column of labels or names, like the Time tab's last clock and last row: no line, so
+   it reads as one more of them; its grey placeholder, or blue once found, sets it apart */
+LookupBox.in-labels,
+LookupBox.in-labels:focus {
+    height: 1;
+    border-bottom: none !important;
 }
 
 /* What was found, in full, until the box is clicked again */

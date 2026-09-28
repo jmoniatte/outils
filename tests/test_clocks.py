@@ -1,14 +1,18 @@
 import asyncio
+import os
+import tempfile
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from tui_kit.theme import load_palette
 
-from outils.clocks import Clock, Reading, read, suggested_zones, zone_named
+from outils.clocks import Clock, Reading, local_zone_name, read, suggested_zones, zone_named
 from outils.config import Config
 from outils.widgets import ClocksView
-from outils.widgets.clocks_view import DST_ICON, fit_name
+from outils.widgets.clocks_view import DST_ICON, NAME_WIDTH, fit_name
 
 from tests.host import Host
 
@@ -44,6 +48,22 @@ class ZoneTest(unittest.TestCase):
         self.assertFalse(any(zone.startswith(("Etc/", "US/")) for zone in zones))
 
 
+    def test_the_local_zone_is_tz_else_where_localtime_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            zones = Path(tmp) / "zoneinfo" / "Europe"
+            zones.mkdir(parents=True)
+            (zones / "Paris").touch()
+            localtime = Path(tmp) / "localtime"
+            localtime.symlink_to(zones / "Paris")
+            with patch.dict(os.environ, {"TZ": ""}):
+                self.assertEqual(local_zone_name(localtime), "Europe/Paris")
+                self.assertIsNone(local_zone_name(Path(tmp) / "missing"))
+            with patch.dict(os.environ, {"TZ": "Asia/Tokyo"}):
+                self.assertEqual(local_zone_name(localtime), "Asia/Tokyo")
+            with patch.dict(os.environ, {"TZ": "Nowhere/Else"}):
+                self.assertEqual(local_zone_name(localtime), "Europe/Paris")
+
+
 class ClocksViewTest(unittest.TestCase):
     def test_a_row_per_clock_redrawn_when_the_minute_turns(self):
         now = [SUMMER]
@@ -55,10 +75,10 @@ class ClocksViewTest(unittest.TestCase):
                 self.assertEqual(
                     view.render().plain.split("\n"),
                     [
-                        f"Portland            22:04   -07:00 {DST_ICON}   America/Los_Angeles",
-                        f"Chicago             00:04   -05:00 {DST_ICON}   America/Chicago",
-                        "UTC                 05:04   +00:00     UTC",
-                        f"Strasbourg          07:04   +02:00 {DST_ICON}   Europe/Paris",
+                        f"{'Portland':<{NAME_WIDTH}}22:04   -07:00 {DST_ICON}   America/Los_Angeles",
+                        f"{'Chicago':<{NAME_WIDTH}}00:04   -05:00 {DST_ICON}   America/Chicago",
+                        f"{'UTC':<{NAME_WIDTH}}05:04   +00:00     UTC",
+                        f"{'Strasbourg':<{NAME_WIDTH}}07:04   +02:00 {DST_ICON}   Europe/Paris",
                     ],
                 )
                 # The sun in yellow, the offset before it in orange, the zone after it grey
@@ -70,12 +90,12 @@ class ClocksViewTest(unittest.TestCase):
                 self.assertEqual(colors["America/Los_Angeles"].lower(), palette["comment"].lower())
                 now[0] = SUMMER.replace(minute=5, second=1)
                 view.tick()
-                self.assertEqual(view.render().plain.split("\n")[2], "UTC                 05:05   +00:00     UTC")
+                self.assertEqual(view.render().plain.split("\n")[2], f"{'UTC':<{NAME_WIDTH}}05:05   +00:00     UTC")
 
         asyncio.run(main())
         self.assertFalse(ClocksView([]).display)
         # A name too long for its column is cut, so the times stay lined up
-        self.assertEqual((fit_name("Llanfairpwllgwyngyll"), fit_name("Rio de Janeiro")), ("Llanfairpwllgwyng…", "Rio de Janeiro"))
+        self.assertEqual((fit_name("Llanfairpwllgwyngyllgogerychwyrndrobwll"), fit_name("Rio de Janeiro")), ("Llanfairpwllgwyngyllgog…", "Rio de Janeiro"))
 
 
 if __name__ == "__main__":

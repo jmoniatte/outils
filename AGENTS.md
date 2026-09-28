@@ -3,7 +3,7 @@
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
 `outils weather`, `outils ip`, `outils sound`, `outils wifi`, `outils dropbox`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
-The calendar shows this month and the next; the time, the time now in a few places, and in a city typed, and an epoch converter that also shows a date in any city or time zone; the weather
+The calendar shows this month and the next; the time, the time now in a few places, and in a city typed, and an epoch converter that also shows the date in any city or time zone; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
 or stops the Dropbox client on this computer and shows the files that changed last; Sound, the
 outputs and microphones through `pactl`, a simplified pavucontrol; Wi-Fi, the networks through
@@ -186,14 +186,14 @@ kept as calendar's number (Monday 0). An unknown day is a warning in the footer 
 `TimeView` holds a `ClocksView`, a row per clock, then a city row (below), over an epoch converter (below). A row is its name, the time there, its offset from
 UTC in orange (the weather's high temperature color) and, while summer time is in force, Nerd
 Font's sun (the weather tab's) in yellow, then the IANA time zone in grey, lined up whether the sun
-shows or not. The name column is a fixed 20 wide (`clocks_view.NAME_WIDTH`), a longer name cut with
+shows or not. The name column is a fixed 26 wide (`clocks_view.NAME_WIDTH`), a longer name cut with
 "…" (`fit_name`), so the city box in it, and the epoch's values, line up with the times. The clocks are `clocks` in `config.yaml`, names mapped to IANA time zones in the order shown; the default is
 Portland, Chicago, UTC and Strasbourg. A zone Python's `zoneinfo` does not know is a warning in
 the footer and is left out. The view checks the time every second and redraws when the minute
 turns; it makes no request but for a city.
 
-The last row (`#city-row`) is a box in the name column, "Add a city or zone", like the Weather
-tab's City box, and the rest of the row a second `ClocksView` with no names (`#city-clock`):
+The last row (`#city-row`) is a box in the name column, "City or time zone", like the Weather
+tab's City box, and the rest of the row a `CityClock` (both it and `ClocksView` draw a clock through `ClockRows`):
 Enter shows the city's time there, and the box its short name in blue. An IANA time zone works
 too, case ignored ("Europe/Paris", "utc"): it is
 checked first (`clocks.zone_named`, against `zoneinfo.available_timezones`), needs no request, and
@@ -210,26 +210,29 @@ IP that is a `LookupDetails`, a row per label and value, the labels green; `look
 box's label as wide as the details' labels, so the box lines up with the values. An error shows
 in red in place of the rows.
 
-Under the clocks and a rule (`#time-rule`), an Epoch box converts what Enter finds there. It
-opens on now, in seconds, and follows it every second and when its tab shows (`follow_now`, from `tab_shown` too) until it is used: never
+Under the clocks and a rule (`#time-rule`), a Time box converts what Enter finds there. It
+opens on now, as the date here in ISO 8601 (`2026-09-27T22:25:14-07:00`), and follows it every second and when its tab shows (`follow_now`, from `tab_shown` too) until it is used: never
 while the box has focus or holds an edit, and not once something typed was converted. The green
 Now button beside the box, shown only while the box is not following now (hidden with
 `visible`, so it keeps its place), goes back to following it, as does Enter on an empty box. Now
-cannot take focus. The box then turns blue (what was typed, or the seconds for an empty box) and
-the rows give the timestamp in seconds, the date in UTC and here, both ISO 8601 with their offset
-(`+00:00` for UTC), and how far it is from now, redrawn every second (`TimeView.measure`) so
-"2 seconds ago" stays true. `epoch.parse` reads a number as seconds (a fraction is kept), or as
+cannot take focus. The box then turns blue (what was typed, or now as the date here for an empty box or Now) and
+the rows give how far it is from now first, redrawn every second (`TimeView.measure`) so
+"2 seconds ago" stays true, then the timestamp in seconds, then the date in UTC and here, both
+ISO 8601 with their offset (`+00:00` for UTC; here labelled by the system's time zone,
+`clocks.local_zone_name`: TZ, else where `/etc/localtime` links, else "Local"). `epoch.parse` reads a number as seconds (a fraction is kept), or as
 milliseconds when it is 13 digits with no fraction (2001 to 2286; as seconds, 13 digits would be
 past year 33000); anything else goes to `datetime.fromisoformat`, and a date with no offset is
 local time, the system's (summer time included, through `astimezone`). An empty box, or `now`,
 is now.
 
-After Now on the same row, an In box takes a city or a time zone, as the city row does
-(`time_view.find_clock`), and adds the date there as one more row after Local, labelled by its
-name. The labels are as wide as the clocks' names (`EpochDetails`, `NAME_WIDTH`), so the values
-line up with the times and the name has room. "Looking up..." or why it failed (red,
-`EpochDetails.error_row`) takes that row's place meanwhile; Enter on an empty In box takes the
-row away. With a city and an In zone showing, the tab has no row to spare in the pop-up.
+The rows' last label is a box too (`#zone-row`), like the clocks' last name: a city or a time
+zone typed there, found as the city row's is (`time_view.find_clock`), shows the time zone it
+resolves to in blue ("America/Toronto" for Québec), and the date there, ISO 8601 (`epoch.iso`), as the row's value, which follows the date
+converted. "Looking up..." (grey) or why it failed (red) is the value meanwhile; Enter on an
+empty box empties it. The labels are as wide as the clocks' names (`NAME_WIDTH`), so the box and
+values line up with the clocks' box and times. Both boxes in a column of names or labels have no
+line under them (the `in-labels` class), so they read as one more name or label; every other
+`LookupBox` keeps its line.
 
 ## Weather
 

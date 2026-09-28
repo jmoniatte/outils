@@ -1,8 +1,10 @@
 """The time now in a few places, by their IANA time zone; no network."""
 
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 # The name shown, then its time zone, top to bottom
@@ -62,6 +64,16 @@ def zone_named(text: str) -> Clock | None:
     if key is None:
         return None
     return Clock(key.rsplit("/", 1)[-1].replace("_", " "), ZoneInfo(key))
+
+
+def local_zone_name(localtime: Path = Path("/etc/localtime")) -> str | None:
+    """The system's IANA time zone, "America/Los_Angeles": TZ when it names one, else where
+    localtime links to under a zoneinfo folder; None when neither says."""
+    tz = os.environ.get("TZ", "").removeprefix(":")
+    if tz and find_zone(tz):
+        return tz
+    _, found, key = str(localtime.resolve()).partition("/zoneinfo/")
+    return key if found and find_zone(key) is not None else None
 
 
 def read(clock: Clock, now: datetime) -> Reading:
