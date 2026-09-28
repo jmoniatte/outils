@@ -75,14 +75,14 @@ class WifiView(Vertical):
                         cursor_foreground_priority="renderable",
                     )
         with Horizontal(id="networks-footer"):
-            yield click_only(Button("Rescan", id="btn-rescan"))
+            yield click_only(Button("Rescan", id="btn-rescan", classes="tinted"))
             # The status takes the time's place whenever there is something to say
             yield Static("", id="networks-scanned")
             yield Static("", id="networks-status")
             # The buttons that cut the connection stand apart on the right
             yield Static("", id="networks-footer-spacer")
-            yield click_only(Button("Disconnect", id="btn-disconnect"))
-            yield click_only(Button("Wi-Fi off", id="btn-wifi"))
+            yield click_only(Button("Disconnect", id="btn-disconnect", classes="tinted"))
+            yield click_only(Button("Wi-Fi off", id="btn-wifi", classes="tinted -red"))
 
     def on_mount(self) -> None:
         # The tables keep focus; the lists switch by click or with the arrows
@@ -261,8 +261,8 @@ class WifiView(Vertical):
         on = self.wifi_on
         button = self.query_one("#btn-wifi", Button)
         button.label = "Wi-Fi off" if on else "Wi-Fi on"
-        button.set_class(on, "-off")
-        button.set_class(not on, "-on")
+        button.set_class(on, "-red")
+        button.set_class(not on, "-green")
         self.query_one("#btn-rescan").display = on
         self.query_one("#btn-disconnect").display = on
         self.query_one("#networks-status").set_class(not on, "-first")

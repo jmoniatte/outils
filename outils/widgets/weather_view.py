@@ -19,6 +19,7 @@ from ..weather import (
     SKIES,
     WIND_LABELS,
     Forecast,
+    Span,
     WeatherError,
     describe,
     forecast,
@@ -44,8 +45,6 @@ NOTICEABLE = {METRIC: 3, IMPERIAL: 5}
 STRONG_WIND = {METRIC: 30, IMPERIAL: 20}
 # Days in a week: after that the names come back
 WEEK = 7
-# What each kind of span is called
-KIND_NAMES = {"rain": "Rain", "snow": "Snow", "storm": "Storm"}
 # Seconds a forecast stays on show before the tab, shown again, asks for a new one
 MAX_AGE = 60 * 60
 
@@ -259,19 +258,19 @@ class ForecastView(Widget):
         warmer = difference > 0
         return Text(f"{'↑' if warmer else '↓'}{abs(difference):>2}°", style=self._style("high" if warmer else "low"))
 
-    def _spans(self, spans: list[tuple[str, int | None, int | None]]) -> Text:
+    def _spans(self, spans: list[Span]) -> Text:
         """Each span in its kind's color, as its icon is: "Rain 5pm–6pm, snow 8pm–10pm"."""
         return Text(", ", style=self._style("dim")).join(Text(words, style=self._style(f"sky-{kind}")) for kind, words in _said(spans))
 
 
-def _said(spans: list[tuple[str, int | None, int | None]]) -> list[tuple[str, str]]:
+def _said(spans: list[Span]) -> list[tuple[str, str]]:
     """Each span's kind and words, the kind said only where it changes: "Rain 8am–1pm", "6pm–10pm",
     "snow after 11pm"; "Rain all day" for a span over the whole day."""
     said = []
     for number, (kind, start, end) in enumerate(spans):
-        name = KIND_NAMES[kind] if number == 0 else KIND_NAMES[kind].lower()
         when = "all day" if start is None and end is None else _span(start, end)
-        said.append((kind, when if number and kind == spans[number - 1][0] else f"{name} {when}"))
+        name = kind if number else kind.capitalize()
+        said.append((kind, when if number and kind == spans[number - 1].kind else f"{name} {when}"))
     return said
 
 

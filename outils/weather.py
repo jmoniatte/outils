@@ -6,6 +6,7 @@ Every call blocks; the app runs them with asyncio.to_thread.
 import json
 import unicodedata
 from dataclasses import asdict, dataclass
+from typing import NamedTuple
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
@@ -137,6 +138,15 @@ class Hour:
         if sky in SEVERITY:
             return sky
         return "snow" if self.temperature is not None and self.temperature <= SNOW_BELOW else "rain"
+
+
+class Span(NamedTuple):
+    """When rain, snow or a storm is likely, in hours of the day: from its first likely hour to the
+    end of its last; None for a start at the start of the day (today: now) or an end at its end."""
+
+    kind: str
+    start: int | None
+    end: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,31 +303,27 @@ def speed(kmh: float, units: str) -> float:
     return kmh / 1.609344 if units == IMPERIAL else kmh
 
 
-def weather_spans(forecast: Forecast, index: int) -> list[tuple[str, int | None, int | None]]:
-    """When rain, snow or a storm is likely on the forecast's day at index, as (kind, start, end)
-    in hours of the day, each span from its first likely hour to the end of its last; None for an
-    end at the start of the day (today: now) or at its end. Empty when none is likely.
-    """
+def weather_spans(forecast: Forecast, index: int) -> list[Span]:
+    """When rain, snow or a storm is likely on the forecast's day at index; empty when none is likely."""
     day = forecast.days[index].day
     begun = forecast.current.time.replace(minute=0, second=0, microsecond=0)
     hours = [hour for hour in forecast.hours if hour.time.date() == day and hour.time >= begun]
-    spans: list[list] = []
+    spans: list[Span] = []
     for hour in hours:
         if (hour.rain_chance or 0) < RAIN_LIKELY:
             continue
         start, kind = hour.time.hour, hour.kind
-        if spans and spans[-1][0] == kind and start - spans[-1][2] < DRY_SPELL:
-            spans[-1][2] = start + 1
+        if spans and spans[-1].kind == kind and start - spans[-1].end < DRY_SPELL:
+            spans[-1] = spans[-1]._replace(end=start + 1)
         else:
-            spans.append([kind, start, start + 1])
+            spans.append(Span(kind, start, start + 1))
     while len(spans) > MAX_SPANS:
         # The shortest dry spell between two of a kind, else the shortest of all
-        gaps = sorted(range(len(spans) - 1), key=lambda i: (spans[i][0] != spans[i + 1][0], spans[i + 1][1] - spans[i][2]))
-        first, second = spans[gaps[0]], spans.pop(gaps[0] + 1)
-        first[0] = max(first[0], second[0], key=SEVERITY.index)
-        first[2] = second[2]
+        gap = min(range(len(spans) - 1), key=lambda i: (spans[i].kind != spans[i + 1].kind, spans[i + 1].start - spans[i].end))
+        first, second = spans[gap], spans.pop(gap + 1)
+        spans[gap] = Span(max(first.kind, second.kind, key=SEVERITY.index), first.start, second.end)
     first_hour = hours[0].time.hour if hours else None
-    return [(kind, None if start == first_hour else start, None if end == 24 else end) for kind, start, end in spans]
+    return [Span(kind, None if start == first_hour else start, None if end == 24 else end) for kind, start, end in spans]
 
 
 def forecast(location: str) -> Forecast:

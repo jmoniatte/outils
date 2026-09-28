@@ -32,7 +32,7 @@ class TimeView(Vertical):
         yield Rule(id="time-rule")
         details = LookupDetails(LABELS, id="epoch-details")
         box = LookupBox(placeholder="Timestamp or date", id="epoch-input")
-        yield lookup_row("Epoch", box, quick_button("Now", "btn-now"), label_width=details.label_width)
+        yield lookup_row("Epoch", box, quick_button("Now", "btn-now", "tinted -green"), label_width=details.label_width)
         yield details
 
     def on_mount(self) -> None:

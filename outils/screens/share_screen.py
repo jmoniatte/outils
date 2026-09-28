@@ -55,7 +55,7 @@ class ShareTabsScreen(PanelScreen):
                 yield Static("Password", classes="details-label")
                 yield Static("Reading...", classes="details-value share-password", markup=False)
             # Focus would draw its label reversed, a second background, once the code closes; c is its key
-            yield click_only(Button("QR code", id="btn-qr"))
+            yield click_only(Button("QR code", id="btn-qr", classes="tinted"))
 
     def on_mount(self) -> None:
         self.query_one(Tabs).can_focus = False

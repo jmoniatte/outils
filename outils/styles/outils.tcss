@@ -127,36 +127,11 @@ OutilsHelpScreen #shortcuts-general {
     width: 1fr;
 }
 
-/* A step back or forward: green, the same width either side, so what sits between them lands in
-   the middle */
-.step-button {
+/* A step back or forward: the same width either side, so what sits between them lands in the middle */
+#calendar-nav .step-button {
     /* Room to spare around "← Previous": with none, Textual wraps it and only the arrow shows */
     width: 14;
-    min-width: 0;
-    height: 1;
-    border: none;
     padding: 0 1;
-    background: $green 30%;
-    color: $green;
-}
-
-.step-button:hover {
-    background: $green 50%;
-}
-
-/* Back to where the steps started */
-.home-button {
-    width: auto;
-    min-width: 0;
-    height: 1;
-    border: none;
-    padding: 0 2;
-    background: $blue 30%;
-    color: $blue;
-}
-
-.home-button:hover {
-    background: $blue 50%;
 }
 
 #calendar-months {
@@ -247,18 +222,7 @@ MonthView > .month--today {
 
 /* Back to following now; green like the calendar's Previous and Next */
 #btn-now {
-    width: auto;
-    min-width: 0;
-    height: 1;
     margin-left: 2;
-    border: none;
-    padding: 0 2;
-    background: $green 30%;
-    color: $green;
-}
-
-#btn-now:hover {
-    background: $green 50%;
 }
 
 /* Between the clocks and the epoch, a rule like the footer's */
@@ -396,7 +360,6 @@ LookupDetails > .lookup--error {
     color: $purple;
 }
 
-
 /* ═══════════════════════════════════════════════════════════════════════
    IP - an address, this computer's by default, then what ipinfo.io knows about it
    ═══════════════════════════════════════════════════════════════════════ */
@@ -442,30 +405,6 @@ LookupDetails > .lookup--error {
 #dropbox-state.-stopping,
 #dropbox-state.-missing {
     color: $red;
-}
-
-/* Red to stop, green to start, like "Stopping..." and "Starting..." */
-#btn-dropbox-toggle {
-    width: auto;
-    min-width: 0;
-    height: 1;
-    border: none;
-    padding: 0 2;
-    background: $red 30%;
-    color: $red;
-}
-
-#btn-dropbox-toggle:hover {
-    background: $red 50%;
-}
-
-#btn-dropbox-toggle.-start {
-    background: $green 30%;
-    color: $green;
-}
-
-#btn-dropbox-toggle.-start:hover {
-    background: $green 50%;
 }
 
 /* A thin scrollbar, only when the files do not all fit */
@@ -629,44 +568,14 @@ DeviceCard .card-state {
     width: 22;
 }
 
-DeviceCard Button {
-    width: auto;
-    min-width: 0;
-    height: 1;
+DeviceCard .tinted {
     margin: 0 0 0 1;
-    border: none;
     padding: 0 1;
-    background: $blue 30%;
-    color: $blue;
 }
 
-DeviceCard Button:hover {
-    background: $blue 50%;
-}
-
-DeviceCard Button:disabled {
-    background: $bg-light;
-    color: $comment;
-}
-
-/* As wide as "Unmute", so the Bluetooth buttons line up */
+/* As wide as "Unmute", so the Bluetooth buttons line up; red to mute, green to unmute */
 DeviceCard .btn-mute {
     width: 10;
-    background: $red 30%;
-    color: $red;
-}
-
-DeviceCard .btn-mute:hover {
-    background: $red 50%;
-}
-
-DeviceCard .btn-mute.-unmute {
-    background: $green 30%;
-    color: $green;
-}
-
-DeviceCard .btn-mute.-unmute:hover {
-    background: $green 50%;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -745,37 +654,8 @@ NetworksTable > .datatable--hover {
     margin-left: 0;
 }
 
-#networks-footer Button {
-    width: auto;
-    min-width: 0;
-    height: 1;
+#networks-footer .tinted {
     margin: 0 0 0 2;
-    border: none;
-    padding: 0 2;
-    background: $blue 30%;
-    color: $blue;
-}
-
-#networks-footer Button:hover {
-    background: $blue 50%;
-}
-
-#networks-footer #btn-wifi.-off {
-    background: $red 30%;
-    color: $red;
-}
-
-#networks-footer #btn-wifi.-off:hover {
-    background: $red 50%;
-}
-
-#networks-footer #btn-wifi.-on {
-    background: $green 30%;
-    color: $green;
-}
-
-#networks-footer #btn-wifi.-on:hover {
-    background: $green 50%;
 }
 
 /* The connection details and a saved network's password and QR code, in tui-kit's panel */
@@ -803,18 +683,7 @@ PanelScreen .details-value {
 
 /* Blue, like an action: the code opens on its own screen. Under the password, lined up with it */
 PanelScreen #btn-qr {
-    width: auto;
-    min-width: 0;
-    height: 1;
     margin: 1 0 0 14;
-    border: none;
-    padding: 0 2;
-    background: $blue 30%;
-    color: $blue;
-}
-
-PanelScreen #btn-qr:hover {
-    background: $blue 50%;
 }
 
 /* The QR code alone over the whole window, so a short window fits it: nothing else shows. At the

@@ -135,8 +135,8 @@ class DeviceCard(Horizontal, can_focus=True):
         yield VolumeBar(classes="card-bar")
         # Blank, in the figure's and the bar's place on headphones with no sink: their Connect button says it
         yield Static("", classes="card-state")
-        yield click_only(Button("", classes="btn-mute"))
-        yield click_only(Button("", classes="btn-bluetooth"))
+        yield click_only(Button("", classes="tinted -red btn-mute"))
+        yield click_only(Button("", classes="tinted btn-bluetooth"))
 
     def on_mount(self) -> None:
         self.update(self.device)
@@ -170,7 +170,8 @@ class DeviceCard(Horizontal, can_focus=True):
         # Hidden but taking its room, so a Connect button lines up with the other cards' Disconnect
         mute.visible = device.playable
         mute.label = "Unmute" if device.muted else "Mute"
-        mute.set_class(device.muted, "-unmute")
+        mute.set_class(device.muted, "-green")
+        mute.set_class(not device.muted, "-red")
 
     def set_columns(self, name_width: int, bluetooth: bool) -> None:
         """Line the card up with the others: the name column fits the longest name, and the Bluetooth one is there

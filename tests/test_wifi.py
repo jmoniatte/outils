@@ -440,7 +440,7 @@ class WifiTest(unittest.TestCase):
             mocks["scan"].assert_not_called()
 
             wifi_button = app.query_one("#btn-wifi")
-            self.assertEqual((str(wifi_button.label), wifi_button.has_class("-on")), ("Wi-Fi on", True))
+            self.assertEqual((str(wifi_button.label), wifi_button.has_class("-green")), ("Wi-Fi on", True))
             self.assertFalse(app.query_one("#btn-rescan").display)
 
             mocks["set_wifi"].side_effect = lambda on: setattr(mocks["wifi_enabled"], "return_value", on)
@@ -450,7 +450,7 @@ class WifiTest(unittest.TestCase):
             self.assertEqual(footer_message(app), "Wi-Fi turned on")
             self.assertEqual(nearby_table(app).networks, SCAN.nearby)
             self.assertEqual(status(app), "")
-            self.assertEqual((str(wifi_button.label), wifi_button.has_class("-off")), ("Wi-Fi off", True))
+            self.assertEqual((str(wifi_button.label), wifi_button.has_class("-red")), ("Wi-Fi off", True))
             self.assertTrue(app.query_one("#btn-rescan").display)
 
             await pilot.press("w")

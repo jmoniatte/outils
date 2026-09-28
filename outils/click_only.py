@@ -12,8 +12,8 @@ def click_only(widget: W) -> W:
     return widget
 
 
-def quick_button(label: str, id: str) -> Button:
+def quick_button(label: str, id: str, classes: str = "") -> Button:
     """A click_only button that takes every click: Textual ignores clicks during the press flash, so it has none."""
-    button = click_only(Button(label, id=id))
+    button = click_only(Button(label, id=id, classes=classes))
     button.active_effect_duration = 0
     return button

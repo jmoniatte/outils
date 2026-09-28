@@ -217,7 +217,7 @@ wheels = [
 [[package]]
 name = "tui-kit"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/jmoniatte/tui-kit.git?branch=master#74729f9ec76e3cef1e0e55ecd7339ab3c164d41c" }
+source = { git = "ssh://git@github.com/jmoniatte/tui-kit.git?branch=master#817f3fdd83fd15acc6d565386b46a5a379c292ed" }
 dependencies = [
     { name = "pyyaml" },
     { name = "rich" },

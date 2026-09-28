@@ -12,7 +12,8 @@ runs Conway's Game of Life, and Snake is the game of snake.
 
 It is built on [tui-kit](https://github.com/jmoniatte/tui-kit), shared with flotte
 and yafyaf-tui: the themes and the picker (`t`), the messages, Help (`?`), the
-dialogs and the startup check all come from there. Put what every app would use
+dialogs, the startup check and the buttons' look (the `tinted` class, with `-green` or `-red`)
+all come from there. Put what every app would use
 in tui-kit, not here; see its AGENTS.md. Like the other apps it draws no border around the
 screen. Unlike them it has no title bar (tui-kit's `AppHeader`): the tabs are the first row, and
 every message, errors included, goes to the footer, in Help's place (see Modes).

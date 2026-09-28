@@ -43,11 +43,11 @@ class CalendarView(Vertical, can_focus=True):
         # As wide as the months, so the buttons sit over their outer edges and their middle
         with Vertical(id="calendar-body"):
             with Horizontal(id="calendar-nav"):
-                yield quick_button("← Previous", "btn-previous").add_class("step-button")
+                yield quick_button("← Previous", "btn-previous", "tinted -green step-button")
                 yield Static("", classes="spacer")
-                yield quick_button("Today", "btn-today").add_class("home-button")
+                yield quick_button("Today", "btn-today", "tinted")
                 yield Static("", classes="spacer")
-                yield quick_button("Next →", "btn-next").add_class("step-button")
+                yield quick_button("Next →", "btn-next", "tinted -green step-button")
             with Horizontal(id="calendar-months"):
                 for year, month in self.months():
                     yield MonthView(year, month, self.first_weekday, self.today)

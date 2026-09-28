@@ -10,7 +10,7 @@ from textual.widgets import Input
 
 from outils.app import OutilsApp
 from outils.config import Config
-from outils.weather import WeatherError, parse_forecast
+from outils.weather import Span, WeatherError, parse_forecast
 from outils.widgets import WeatherView
 from outils.widgets.weather_view import MAX_AGE, ForecastView, _said
 
@@ -193,14 +193,14 @@ class WeatherViewTest(unittest.TestCase):
 class SpansTest(unittest.TestCase):
     def test_each_span_is_said_with_its_kind_where_it_changes(self):
         def said(spans):
-            return ", ".join(words for kind, words in _said(spans))
+            return ", ".join(words for kind, words in _said([Span(*span) for span in spans]))
 
         self.assertEqual(said([("rain", 8, 13), ("rain", 18, 22)]), "Rain 8am–1pm, 6pm–10pm")
         self.assertEqual(said([("rain", 17, 18), ("snow", 20, 22)]), "Rain 5pm–6pm, snow 8pm–10pm")
         self.assertEqual(said([("storm", None, 9), ("rain", 18, None)]), "Storm until 9am, rain after 6pm")
         self.assertEqual(said([("rain", 15, 21)]), "Rain 3pm–9pm")
         self.assertEqual(said([("snow", None, None)]), "Snow all day")
-        self.assertEqual([kind for kind, words in _said([("rain", 1, 2), ("snow", 5, 6)])], ["rain", "snow"])
+        self.assertEqual([kind for kind, words in _said([Span("rain", 1, 2), Span("snow", 5, 6)])], ["rain", "snow"])
 
 
 class WeatherModeTest(unittest.TestCase):

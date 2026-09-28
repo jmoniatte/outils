@@ -75,7 +75,7 @@ class DropboxView(Vertical, can_focus=True):
             state_label = Static("", id="dropbox-state")
             state_label.display = False
             yield state_label
-            toggle = quick_button("Stop Dropbox", "btn-dropbox-toggle")
+            toggle = quick_button("Stop Dropbox", "btn-dropbox-toggle", "tinted -red")
             # Until the client has answered; hidden, not removed, so it keeps its place
             toggle.visible = False
             yield toggle
@@ -119,7 +119,8 @@ class DropboxView(Vertical, can_focus=True):
         toggle.display = self.state != MISSING
         toggle.label = "Start Dropbox" if stopped else "Stop Dropbox"
         toggle.tooltip = START_TIP if stopped else STOP_TIP
-        toggle.set_class(stopped, "-start")
+        toggle.set_class(stopped, "-green")
+        toggle.set_class(not stopped, "-red")
         self._show_label("missing", "The dropbox command is not installed" if self.state == MISSING else "")
 
     def _show_label(self, name: str, text: str) -> None:

@@ -18,7 +18,6 @@ from . import REPOSITORY_URL, __version__, remote
 from .click_only import click_only
 from .config import CONFIG_FILE, Config, load_config, save_units
 from .screens import OutilsHelpScreen
-from .widgets.lookup_box import LookupBox
 from .widgets import (
     CalendarView,
     DropboxView,
@@ -30,6 +29,7 @@ from .widgets import (
     WeatherView,
     WifiView,
 )
+from .widgets.lookup_box import LookupBox
 
 STYLES_DIR = Path(__file__).parent / "styles"
 # tui-kit's stylesheets first, so the app's own rules win where they differ
