@@ -12,6 +12,7 @@ from textual.widgets import TabbedContent
 from outils.app import MODES, FooterMessage, OutilsApp
 from outils.config import Config
 from outils.ipinfo import IpInfoError
+from outils.history import HistoryError
 from outils.nmcli import Scan
 from outils.pactl import SINK, Device, Mixer
 from outils.weather import WeatherError
@@ -46,6 +47,7 @@ class AppTest(unittest.TestCase):
                 # The modes that ask a service get no answer: the tests never reach the network
                 patch("outils.widgets.weather_view.forecast", side_effect=WeatherError("offline")) as self.forecast,
                 patch("outils.widgets.ip_view.fetch", side_effect=IpInfoError("offline")) as self.fetch,
+                patch("outils.widgets.calendar_view.events", side_effect=HistoryError("offline")),
                 # Nor the Dropbox client on this computer
                 patch("outils.widgets.dropbox_view.status", return_value="Up to date") as self.status,
                 patch("outils.widgets.dropbox_view.recent", return_value=[]),
@@ -152,14 +154,15 @@ class AppTest(unittest.TestCase):
 
         self.run_app(body, "weather")
 
-    def test_weather_and_ip_credit_their_service_over_the_rule_with_a_link(self):
+    def test_time_weather_and_ip_credit_their_service_over_the_rule_with_a_link(self):
         async def body(app, pilot):
             credit = app.query_one("#mode-credit")
             link = app.query_one("#mode-credit-link")
-            self.assertFalse(credit.display)
-            for text, url in (("Data by open-meteo.com", "https://open-meteo.com"), ("Data by ipinfo.io", "https://ipinfo.io")):
-                await pilot.press("tab")
-                await pilot.pause()
+            # Time finds its cities with Open-Meteo, as Weather does
+            for index, (text, url) in enumerate((("Data by open-meteo.com", "https://open-meteo.com"),) * 2 + (("Data by ipinfo.io", "https://ipinfo.io"),)):
+                if index:
+                    await pilot.press("tab")
+                    await pilot.pause()
                 self.assertTrue(credit.display)
                 line = screen_row(app, credit.region.y)
                 self.assertEqual(line.rstrip(), " " * (app.size.width - 1 - len(text)) + text)
@@ -177,37 +180,40 @@ class AppTest(unittest.TestCase):
                 await pilot.pause()
             open_url.assert_called_once_with("https://ipinfo.io")
             self.assertIsNone(app.focused)
-
-        # The tab before the weather, which has no credit either
-        self.run_app(body, "time")
-
-    def test_the_calendar_shows_today_in_full_where_the_credits_go_then_the_next_tab_does_not(self):
-        async def body(app, pilot):
-            credit = app.query_one("#mode-credit")
-            today = app.query_one(CalendarView).today
-            text = f"{today:%A, %B} {today.day}, {today.year}"
-            self.assertTrue(credit.display)
-            self.assertFalse(app.query_one("#mode-credit-link").display)
-            label = app.query_one("#mode-credit-text")
-            self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
-            line = screen_row(app, credit.region.y)
-            self.assertEqual(line.rstrip(), " " * (app.size.width - 1 - len(text)) + text)
+            # Sound asks no service
             await pilot.press("tab")
             await pilot.pause()
             self.assertFalse(credit.display)
-            await pilot.press("tab")
-            await pilot.pause()
-            self.assertTrue(app.query_one("#mode-credit-link").display)
-            # A credit's words stay grey
-            self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["comment"].lower())
 
-        self.run_app(body)
+        self.run_app(body, "time")
 
-    def test_the_footnote_follows_a_new_day(self):
+    def test_the_calendar_shows_today_in_full_over_its_buttons_in_the_row_other_tabs_keep_blank(self):
         async def body(app, pilot):
+            label = app.query_one("#calendar-today")
+            today = app.query_one(CalendarView).today
+            self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
+            # Right under the tabs, right over the buttons
+            self.assertEqual(label.region.y, app.mode_tabs.region.bottom)
+            self.assertEqual(app.query_one("#calendar-nav").region.y, label.region.y + 1)
+            self.assertEqual(screen_row(app, label.region.y).strip(), f"{today:%A, %B} {today.day}, {today.year}")
+            # Centered over the months
+            text = screen_row(app, label.region.y)
+            nav = app.query_one("#calendar-nav").region
+            middle = (len(text) - len(text.lstrip()) + len(text.rstrip())) / 2
+            self.assertLessEqual(abs(middle - (nav.x + nav.right) / 2), 1)
+            # Wikipedia's events credited over the rule, like the other tabs' data
+            credit = app.query_one("#mode-credit")
+            self.assertTrue(credit.display)
+            self.assertEqual(screen_row(app, credit.region.y).strip(), "Data by wikimedia.org")
+            self.assertEqual(app.query_one("#mode-credit-link").url, "https://wikimedia.org")
+            # A new day shows
             app.query_one(CalendarView).set_today(date(2027, 1, 1))
             await pilot.pause()
-            self.assertEqual(str(app.query_one("#mode-credit-text").render()), "Friday, January 1, 2027")
+            self.assertEqual(str(label.render()), "Friday, January 1, 2027")
+            # The other tabs keep a blank row under the tabs
+            await pilot.press("tab")
+            await pilot.pause()
+            self.assertEqual(app.query_one("#time").region.y, app.mode_tabs.region.bottom + 1)
 
         self.run_app(body)
 

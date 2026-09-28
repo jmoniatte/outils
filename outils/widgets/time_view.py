@@ -38,6 +38,9 @@ class TimeView(Vertical):
     cached with it; the box completes the weather's cities. The city is not saved.
     """
 
+    # Shown at the bottom right, over the footer's rule: the cities are found by Open-Meteo, as on the Weather tab
+    CREDIT = ("Data by", "https://open-meteo.com")
+
     def __init__(self, config: Config) -> None:
         super().__init__(id="time")
         self.clocks = config.clocks

@@ -7,7 +7,7 @@
     height: auto;
 }
 
-/* Over the rule: where the tab's data comes from (a CREDIT), or its footnote */
+/* Over the rule: where the tab's data comes from (a CREDIT) */
 #mode-credit {
     height: 1;
     padding: 0 1;
@@ -20,11 +20,6 @@
 #mode-credit-text {
     width: auto;
     color: $comment;
-}
-
-/* The calendar's date: something to read, not a source */
-#mode-credit-text.-footnote {
-    color: $blue;
 }
 
 /* Like every link, the repository's on Help included: blue, underlined on hover */
@@ -111,12 +106,33 @@ OutilsHelpScreen #shortcuts-general {
     height: auto;
 }
 
+/* The date takes the blank row the tabs keep under them elsewhere (UNDER_TABS) */
+#modes.-under-tabs > ContentTabs {
+    margin-bottom: 0;
+}
+
+/* As wide as the months, so the date lands over their middle */
+#calendar-body > Center {
+    width: 100%;
+    height: 1;
+}
+
+/* Today in full, over the buttons; a click goes back to today, so it underlines on hover like a link */
+#calendar-today {
+    width: auto;
+    color: $blue;
+}
+
+#calendar-today:hover {
+    text-style: underline;
+}
+
 #calendar-body {
     width: auto;
     height: auto;
 }
 
-/* As wide as the months below: Previous over the left edge, Today in the middle, Next on the right */
+/* As wide as the months below: Previous over the left edge, Next over the right */
 #calendar-nav {
     width: 100%;
     height: 1;
@@ -127,7 +143,7 @@ OutilsHelpScreen #shortcuts-general {
     width: 1fr;
 }
 
-/* A step back or forward: the same width either side, so what sits between them lands in the middle */
+/* A step back or forward, the same width either side */
 #calendar-nav .step-button {
     /* Room to spare around "← Previous": with none, Textual wraps it and only the arrow shows */
     width: 14;
@@ -186,6 +202,41 @@ MonthView > .month--today {
     background: $blue;
     color: $bg;
     text-style: bold;
+}
+
+/* The day whose history shows under the months, when it is not today */
+MonthView > .month--picked {
+    background: $blue 30%;
+    color: $fg;
+    text-style: bold;
+}
+
+/* Under the months, the tab's whole width: the year, then what happened, wrapped beside it */
+#calendar-history {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+}
+
+#history-year {
+    width: auto;
+    margin-right: 1;
+    color: $blue;
+    text-style: bold;
+}
+
+#history-text {
+    width: 1fr;
+    height: auto;
+    color: $fg;
+}
+
+#history-text.-waiting {
+    color: $comment;
+}
+
+#history-text.-error {
+    color: $red;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

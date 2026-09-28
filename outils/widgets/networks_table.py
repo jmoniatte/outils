@@ -7,6 +7,7 @@ from textual import events
 from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.message import Message
+from textual.strip import Strip
 from textual.widgets import DataTable
 from tui_kit.shortcuts import ACTIONS, GENERAL
 
@@ -21,6 +22,8 @@ COLUMNS = (
     ("band", 7),
 )
 BARS = "▂▄▆█"
+# Blank columns between the rows and the scrollbar, as the Dropbox list keeps
+SCROLLBAR_GAP = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +75,11 @@ class NetworksTable(DataTable):
     def on_mount(self) -> None:
         for key, width in COLUMNS:
             self.add_column(key, key=key, width=width)
+
+    def render_line(self, y: int) -> Strip:
+        # DataTable stretches the selected row's shading up to the scrollbar, and padding would go right of the bar
+        width = self.scrollable_content_region.width
+        return super().render_line(y).crop(0, width - SCROLLBAR_GAP).extend_cell_length(width, self.rich_style)
 
     def set_colors(self, colors: NetworkColors) -> None:
         """Re-render the rows against a new palette; their colors are baked into Rich text."""

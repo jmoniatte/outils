@@ -51,7 +51,9 @@ class IpInfoTest(unittest.TestCase):
     def test_fetch_reads_the_answer_and_turns_failures_into_errors(self):
         with patch("outils.web.urlopen", return_value=io.BytesIO(json.dumps(ANSWER).encode())) as urlopen:
             self.assertEqual(fetch()["ip"], "97.115.117.246")
-        self.assertEqual(urlopen.call_args.args[0], "https://ipinfo.io/json")
+        self.assertEqual(urlopen.call_args.args[0].full_url, "https://ipinfo.io/json")
+        # Wikipedia refuses urllib's own User-Agent, so every request says it is outils
+        self.assertTrue(urlopen.call_args.args[0].get_header("User-agent").startswith("outils/"))
         for failure, message in (
             (URLError("no network"), "Cannot reach ipinfo.io: no network"),
             (HTTPError("u", 429, "Too many", {}, io.BytesIO()), "answered 429"),
@@ -67,7 +69,7 @@ class IpInfoTest(unittest.TestCase):
         def asked(target):
             with patch("outils.web.urlopen", return_value=io.BytesIO(json.dumps(ANSWER).encode())) as urlopen:
                 fetch(target)
-            return urlopen.call_args.args[0]
+            return urlopen.call_args.args[0].full_url
 
         self.assertEqual(asked("8.8.8.8"), "https://ipinfo.io/8.8.8.8/json")
         self.assertEqual(asked("2001:4860:4860::8888"), "https://ipinfo.io/2001:4860:4860::8888/json")

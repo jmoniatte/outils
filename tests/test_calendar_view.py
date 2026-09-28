@@ -4,10 +4,12 @@ from datetime import date
 from unittest.mock import patch
 
 from outils.config import Config
+from outils.history import Event, HistoryError
 from outils.widgets import CalendarView, MonthView
-from tests.host import Host
+from tests.host import Host, settle
 
 TODAY = date(2026, 9, 24)
+EVENTS = [Event(1869, "Black Friday."), Event(1957, "Little Rock Nine.")]
 
 
 def lines(month: MonthView) -> list[str]:
@@ -33,11 +35,14 @@ def past_days(month: MonthView) -> list[int]:
 
 
 class CalendarViewTest(unittest.TestCase):
-    def run_view(self, body, config=Config(), **months):
+    def run_view(self, body, config=Config(), history=EVENTS, **months):
         async def main():
             app = Host(CalendarView(config, today=TODAY, **months))
             # Its tab showing reads the date
-            with patch("outils.widgets.calendar_view.date") as clock:
+            with (
+                patch("outils.widgets.calendar_view.date") as clock,
+                patch("outils.widgets.calendar_view.events", side_effect=history if isinstance(history, Exception) else None, return_value=history) as self.events,
+            ):
                 clock.today.return_value = TODAY
                 async with app.run_test(size=(90, 16)) as pilot:
                     await pilot.pause()
@@ -77,7 +82,7 @@ class CalendarViewTest(unittest.TestCase):
             self.assertEqual(months[1].region.x - months[0].region.right, 2)
             self.assertEqual(months[0].region.y, months[1].region.y)
             self.assertLessEqual(months[1].region.right - months[0].region.x, 58)
-            self.assertEqual(app.view.footnote, "Thursday, September 24, 2026")
+            self.assertEqual(app.view.today_text, "Thursday, September 24, 2026")
 
         self.run_view(body)
 
@@ -105,7 +110,7 @@ class CalendarViewTest(unittest.TestCase):
             await pilot.pause()
             months = list(app.query(MonthView))
             self.assertEqual([spans(m, "today") for m in months], [[" 25 "], []])
-            self.assertEqual(view.footnote, "Friday, September 25, 2026")
+            self.assertEqual(view.today_text, "Friday, September 25, 2026")
             # Today's month in focus follows today into the next one
             view.set_today(date(2026, 10, 1))
             await pilot.pause()
@@ -118,7 +123,7 @@ class CalendarViewTest(unittest.TestCase):
             await pilot.pause()
             self.assertEqual(view.months(), [(2026, 8), (2026, 9)])
             self.assertEqual([title_kind(m) for m in months], ["title-past", "title-past"])
-            self.assertTrue(app.query_one("#btn-today").visible)
+            self.assertEqual(str(app.query_one("#calendar-today").render()), "Sunday, November 1, 2026")
             # Showing the tab reads the date again
             with patch("outils.widgets.calendar_view.date") as clock:
                 clock.today.return_value = date(2026, 11, 2)
@@ -136,16 +141,13 @@ class CalendarViewTest(unittest.TestCase):
 
         self.run_view(body, Config(week_start=6), before=2, after=2)
 
-    def test_previous_today_and_next_buttons_move_the_months(self):
+    def test_previous_and_next_move_the_months_and_the_date_goes_back_to_today(self):
         async def body(app, pilot):
             view = app.view
-            today = app.query_one("#btn-today")
-            self.assertFalse(today.visible)
-            # Today's month on show, even second, leaves nothing to go back to
+            today = app.query_one("#calendar-today")
             await pilot.click("#btn-previous")
             await pilot.pause()
             self.assertEqual(view.months(), [(2026, 8), (2026, 9)])
-            self.assertFalse(today.visible)
             await pilot.click("#btn-next")
             await pilot.pause()
             # Quick clicks each count
@@ -153,14 +155,15 @@ class CalendarViewTest(unittest.TestCase):
             await pilot.click("#btn-next")
             await pilot.pause()
             self.assertEqual(view.months(), [(2026, 11), (2026, 12)])
-            self.assertTrue(today.visible)
             await pilot.click("#btn-previous")
             await pilot.pause()
             self.assertEqual((view.year, view.month), (2026, 10))
-            await pilot.click("#btn-today")
+            # Always there, whatever the month
+            self.assertEqual(str(today.render()), "Thursday, September 24, 2026")
+            await pilot.click(today)
             await pilot.pause()
             self.assertEqual((view.year, view.month), (2026, 9))
-            self.assertFalse(today.visible)
+            self.assertIs(app.focused, view)
             self.assertEqual([spans(m, "today") for m in app.query(MonthView)], [[" 24 "], []])
 
         self.run_view(body)
@@ -181,12 +184,80 @@ class CalendarViewTest(unittest.TestCase):
             self.assertIn("← Previous", nav)
             self.assertIn("Next →", nav)
             months = list(app.query(MonthView))
-            previous, today, following = (app.query_one(f"#btn-{name}").region for name in ("previous", "today", "next"))
+            previous, following = (app.query_one(f"#btn-{name}").region for name in ("previous", "next"))
             self.assertEqual(previous.x, months[0].region.x)
             self.assertEqual(following.right, months[-1].region.right)
-            self.assertLessEqual(abs((today.x + today.right) - (months[0].region.x + months[-1].region.right)), 1)
 
         self.run_view(body)
+
+    def test_a_day_clicked_shows_what_happened_that_day_from_wikipedia(self):
+        async def body(app, pilot):
+            view = app.view
+            await settle(app, pilot)
+            year, text = (app.query_one(f"#history-{name}").render().plain for name in ("year", "text"))
+            # Today's, once its tab shows
+            self.assertEqual(self.events.call_args_list[0].args, (9, 24))
+            self.assertIn((int(year), text), [(e.year, e.text) for e in EVENTS])
+            months = list(app.query(MonthView))
+            self.assertEqual(months[0].day_at(0, 4), None)
+            self.assertEqual(months[0].day_at(5, 4), date(2026, 9, 1))
+            self.assertEqual(months[1].day_at(9, 9), None)
+            self.assertEqual(months[1].day_at(4, 4), None)
+            # Row 8 is the week of October 26, its second column the 27th
+            await pilot.click(months[1], offset=(5, 8))
+            await settle(app, pilot)
+            self.assertEqual(view.picked, date(2026, 10, 27))
+            self.assertEqual(self.events.call_args.args, (10, 27))
+            self.assertEqual([spans(m, "picked") for m in months], [[], [" 27 "]])
+            # The same day again: another event, no request
+            shown = view.event
+            await pilot.click(months[1], offset=(5, 8))
+            await settle(app, pilot)
+            self.assertEqual(self.events.call_count, 2)
+            self.assertNotEqual(view.event, shown)
+            # The day names are no day
+            await pilot.click(months[1], offset=(5, 2))
+            await settle(app, pilot)
+            self.assertEqual(view.picked, date(2026, 10, 27))
+            # The date, from another month, picks today again
+            await pilot.click("#btn-next")
+            await pilot.click("#calendar-today")
+            await settle(app, pilot)
+            self.assertEqual(view.picked, TODAY)
+            # Today's events were kept from the start: shown again with no request
+            self.assertEqual(self.events.call_count, 2)
+            self.assertEqual(app.query_one("#history-text").render().plain, view.event.text)
+            self.assertEqual([spans(m, "picked") for m in months], [[], []])
+
+        self.run_view(body)
+
+    def test_an_event_takes_the_whole_width_and_three_lines_at_most(self):
+        long = Event(1900, " ".join(["word"] * 200))
+
+        async def body(app, pilot):
+            await settle(app, pilot)
+            text = app.query_one("#history-text")
+            self.assertEqual(app.query_one("#calendar-history").region.width, app.view.content_size.width)
+            # An event that fits is picked over one that does not
+            self.assertEqual(app.view.event, EVENTS[0])
+            # With none that fits, it is cut at a word
+            app.view.history[(9, 24)] = [long]
+            app.view.event = None
+            await pilot.click(list(app.query(MonthView))[0], offset=(13, 7))
+            await settle(app, pilot)
+            self.assertTrue(text.render().plain.endswith("word…"))
+            self.assertEqual(text.region.height, 3)
+
+        self.run_view(body, history=[EVENTS[0], long])
+
+    def test_a_failure_shows_in_place_of_the_event(self):
+        async def body(app, pilot):
+            await settle(app, pilot)
+            self.assertEqual(app.query_one("#history-text").render().plain, "offline")
+            self.assertTrue(app.query_one("#history-text").has_class("-error"))
+            self.assertFalse(app.query_one("#history-year").display)
+
+        self.run_view(body, history=HistoryError("offline"))
 
 
 if __name__ == "__main__":

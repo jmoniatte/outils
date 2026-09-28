@@ -105,6 +105,23 @@ class WifiTest(unittest.TestCase):
 
         self.run_app(body)
 
+    def test_a_long_list_scrolls_with_two_blank_columns_before_the_scrollbar(self):
+        many = [Network(f"Network {i}", signal=90 - i, security="WPA2", frequency=5180) for i in range(30)]
+
+        async def body(app, pilot, mocks):
+            table = nearby_table(app)
+            self.assertTrue(table.show_vertical_scrollbar)
+            # The selected row's shading stops two columns short of the bar, as on the Dropbox list
+            strip = next(strip for strip in app.screen._compositor.render_strips() if "Network 0 " in strip.text)
+            backgrounds = [segment.style.bgcolor for segment in strip for _ in segment.text]
+            bar = table.scrollable_content_region.right
+            shading = backgrounds[table.region.x + 2]
+            self.assertEqual(backgrounds[bar - 3], shading)
+            self.assertNotEqual(backgrounds[bar - 2], shading)
+            self.assertNotEqual(backgrounds[bar - 1], shading)
+
+        self.run_app(body, scan=Scan(nearby=many, saved=[]), height=20)
+
     def test_a_new_network_asks_for_the_password_until_it_is_right(self):
         def connect(network, password=""):
             if password != "good":

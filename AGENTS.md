@@ -3,7 +3,7 @@
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
 `outils weather`, `outils ip`, `outils sound`, `outils wifi`, `outils dropbox`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
-The calendar shows this month and the next; the time, the time now in a few places, and in a city typed, and an epoch converter that also shows the date in any city or time zone; the weather
+The calendar shows this month and the next, and what happened on the day clicked, from Wikipedia; the time, the time now in a few places, and in a city typed, and an epoch converter that also shows the date in any city or time zone; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
 or stops the Dropbox client on this computer and shows the files that changed last; Sound, the
 outputs and microphones through `pactl`, a simplified pavucontrol; Wi-Fi, the networks through
@@ -87,9 +87,10 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
     command.py          # Runs a tab's command (pactl, bluetoothctl, nmcli) through tui-kit, failures as the tab's error; no Textual
     click_only.py       # Widgets a click must not give focus to, so the view keeps its keys; quick_button takes every click
-    web.py              # JSON from a web service (Open-Meteo, ipinfo.io) with urllib, failures as the tab's error; no Textual
+    web.py              # JSON from a web service (Open-Meteo, ipinfo.io, Wikipedia) with urllib, outils's User-Agent, failures as the tab's error; no Textual
     reload.py           # A view's reload one at a time: a timer tick while one runs is skipped, a request runs it again after; no Textual
     remote.py           # `outils --show <mode>`: tell an outils already running which tab to show, over a Unix socket; no Textual
+    history.py          # Wikipedia's "On this day": the events on a day of the year; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
     dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
     pactl.py            # Every pactl call and the parsing of its JSON output; no Textual
@@ -123,8 +124,8 @@ relayout does not always send Show to a pane that comes back (Sound got none onc
 to it). Sound and Wi-Fi give focus to one of their own widgets there. `_show_mode` runs twice for
 the first tab (on mount, then on `TabActivated`), so it does all this only when the view changes.
 A view test's `Host` calls `tab_shown` once mounted, as the app does.
-Weather and IP ask their service the first time their tab shows (`tab_shown`), so opening the
-calendar makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
+The calendar, Weather and IP ask their service the first time their tab shows (`tab_shown`), so
+opening another tab makes no request. The panes are `<mode>-mode`, not the view's own id, which a duplicate
 would break.
 
 Every tab sits over the same footer: `OutilsApp.compose` adds `#app-footer`, docked at the
@@ -135,11 +136,11 @@ over the rest of the line (an error wraps onto up to three lines), and Help come
 A view with a `CREDIT`, its words and its site's URL, has it shown in grey at the right, over
 the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlined on hover like
 every link: "Data by open-meteo.com" on the Weather tab
-(its CC BY 4.0 license asks for it) and "Data by ipinfo.io" on the IP tab. A view with a `footnote`
-instead has that text there, in blue and with no link: the calendar gives today in full ("Thursday,
-September 24, 2026"), shown again when a new day starts (`FootnoteChanged`). Time, Dropbox, Sound, Wi-Fi, Life and Snake have neither, so the line is hidden there.
+(its CC BY 4.0 license asks for it) and on the Time tab, whose cities it finds, "Data by ipinfo.io" on the IP tab and "Data by wikimedia.org"
+on the calendar, for Wikipedia's events (CC BY-SA); the other tabs have none,
+so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
-`weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
+`calendar_view.events`, `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
 `dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder,
 `pactl.mixer` and `bluetooth.headsets` so none runs `pactl` or `bluetoothctl`, and the
 `nmcli` functions so none runs `nmcli`.
@@ -157,14 +158,13 @@ mode is a view in `widgets/` and an entry in `MODES`;
 ## Calendar
 
 `CalendarView` puts `before` + 1 + `after` `MonthView`s side by side (0 and 1 by default), the
-month in focus first, under the Previous, Today and Next buttons; it starts on today's
+month in focus first, under today's date and the Previous and Next buttons; it starts on today's
 month. outils stays open for days, so `CalendarView.set_today` reads the date again every minute
 (`check_today`) and when its tab shows (`tab_shown`, which calls it): today's highlight moves, and a calendar on today's old month follows
 to the new one, while a month picked by hand stays. Tests pass `today=` and call `set_today`. `CalendarView.action_shift(delta)` moves them all (Previous, Next, `←` and `→`), and
-`show_month` puts any month in focus (Today, which is hidden while today's month is
-on show, first or not; hidden with `visible`, so it keeps its place). The buttons cannot take focus, so the calendar keeps it and its keys work after
+`show_month` puts any month in focus (`go_today`, a click on the date). The buttons cannot take focus, so the calendar keeps it and its keys work after
 a click. The button row is as wide as the months (`width: 100%` of an auto-width parent), and
-Previous and Next share a width so Today lands in the middle. Each `MonthView` is laid out like
+Previous and Next share a width. Each `MonthView` is laid out like
 `cal`, with room to read it: every day sits in a four-column cell (its two digits and a space on
 each side), so a month is 28 columns wide and two need 58. Top
 to bottom: the name centered, a blank row, the day names, a dashed rule under them, then always
@@ -177,6 +177,26 @@ wherever it is in the row (`month--title-current`), and a month wholly past has 
 number always means past. The colors come
 from TCSS through `MonthView`'s component classes, so a theme change repaints them with no
 `apply_theme` override.
+
+Under the months (`#calendar-history`, the tab's whole width), something that happened on the day
+picked, in a past year: the year in bold blue, then the event, wrapped beside it, on
+`HISTORY_LINES` (3) lines at most. An event that fits is picked over one that does not; with none,
+it is cut at a word with "…", and wrapped and cut again when the view is resized. Today is picked at first; a click
+on a day picks it (`MonthView.day_at` finds the day from the click's place, since a month is one
+piece of text), and a picked day other than today gets a light blue cell (`month--picked`). A click on
+the date picks today again. There is no key for it. `history.events` asks Wikipedia's "On this day" for the events its editors
+picked (`onthisday/selected/MM/DD`, no account or key, but it refuses urllib's own User-Agent, so
+`web.get_json` sends outils's). The answer is by day of the year, not by year, so every September
+27 gives the same list. `CalendarView.show_history` waits for it in a thread, so the calendar
+works meanwhile ("Asking Wikipedia about..." in grey; a failure in red, in its place). The events
+are kept per day while outils runs, so a day clicked again costs no request and shows another
+event, picked at random. A new day moves the pick to the new today if it was on the old one.
+
+Today in full ("Thursday, September 24, 2026") always sits centered over the months
+(`#calendar-today`), and follows a new day. It takes the place of a Today button: a click on it
+puts today's month in focus and picks today (`go_today`), and it underlines on hover like a link. It takes the blank row the tabs keep under them on
+every other tab: a view with `UNDER_TABS` has `#modes` get the `-under-tabs` class, which drops
+the tabs' `margin-bottom`, so the date adds no row.
 
 `week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is
 kept as calendar's number (Monday 0). An unknown day is a warning in the footer and Monday.
@@ -471,7 +491,10 @@ buttons, right over the app's footer rule. `tab` moves between outils' own tabs,
 switch lists (`NetworksTable.SwitchList`); the table has no use for them. `WifiView` stops the
 inner `TabActivated`, and `OutilsApp.mode_tabs` names outils' own row of tabs, not this one. The
 lists bake their colors into Rich text, which `refresh_css` does not reach, so
-`WifiView.set_colors` repaints them from `BaseApp.palette` on a theme change (see Themes).
+`WifiView.set_colors` repaints them from `BaseApp.palette` on a theme change (see Themes). As on the
+Dropbox list, two blank columns sit between the rows and the scrollbar (`SCROLLBAR_GAP`):
+`NetworksTable.render_line` blanks them, since `DataTable` stretches the selected row's shading up
+to the bar and padding would go right of it.
 
 `nmcli.scan` reads `nmcli -t device wifi list` and `parse_scan` merges access points into one
 `Network` per SSID: the one in use wins, else the strongest. Hidden SSIDs are dropped. Saved

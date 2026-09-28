@@ -1,6 +1,8 @@
 from datetime import date
 
 from rich.text import Text
+from textual import events
+from textual.message import Message
 from textual.widget import Widget
 
 from ..months import WEEKS_SHOWN, month_weeks, weekday_labels
@@ -31,7 +33,13 @@ class MonthView(Widget):
         "month--rule",
         "month--past",
         "month--today",
+        "month--picked",
     }
+
+    class DayClicked(Message):
+        def __init__(self, day: date) -> None:
+            super().__init__()
+            self.day = day
 
     DEFAULT_CSS = f"""
     MonthView {{
@@ -40,18 +48,34 @@ class MonthView(Widget):
     }}
     """
 
-    def __init__(self, year: int, month: int, first_weekday: int, today: date, **kwargs) -> None:
+    def __init__(self, year: int, month: int, first_weekday: int, today: date, picked: date | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.year = year
         self.month = month
         self.first_weekday = first_weekday
         self.today = today
+        self.picked = picked
 
-    def show(self, year: int, month: int, today: date) -> None:
+    def show(self, year: int, month: int, today: date, picked: date | None = None) -> None:
         self.year = year
         self.month = month
         self.today = today
+        self.picked = picked
         self.refresh()
+
+    def day_at(self, x: int, y: int) -> date | None:
+        """The day drawn at x, y inside the month, None over its name, the day names or an empty cell."""
+        week, column = y - (MONTH_HEIGHT - WEEKS_SHOWN), x // CELL
+        if not (0 <= week < WEEKS_SHOWN and 0 <= column < 7):
+            return None
+        day = month_weeks(self.year, self.month, self.first_weekday)[week][column]
+        return date(self.year, self.month, day) if day else None
+
+    def on_click(self, event: events.Click) -> None:
+        offset = event.get_content_offset(self)
+        day = offset and self.day_at(offset.x, offset.y)
+        if day:
+            self.post_message(self.DayClicked(day))
 
     def _style(self, name: str):
         return self.get_component_rich_style(f"month--{name}")
@@ -80,6 +104,8 @@ class MonthView(Widget):
                 shown_day = date(self.year, self.month, day)
                 if shown_day == self.today:
                     style = self._style("today")
+                elif shown_day == self.picked:
+                    style = self._style("picked")
                 elif shown_day < self.today:
                     style = self._style("past")
                 else:

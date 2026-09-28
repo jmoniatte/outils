@@ -180,9 +180,6 @@ class OutilsApp(BaseApp):
             if hasattr(view, "set_colors"):
                 view.set_colors()
 
-    def on_footnote_changed(self) -> None:
-        self._show_credit(self.shown_view)
-
     def on_weather_view_units_changed(self, event: WeatherView.UnitsChanged) -> None:
         warning = save_units(event.units, CONFIG_FILE)
         if warning:
@@ -202,6 +199,8 @@ class OutilsApp(BaseApp):
         self.mode = pane.id.removesuffix("-mode")
         view = pane.children[0]
         self._show_credit(view)
+        # A view with a first row of its own (the calendar's date) takes the blank row under the tabs
+        self.query_one("#modes", TabbedContent).set_class(getattr(view, "UNDER_TABS", False), "-under-tabs")
         # Once per switch: on mount, TabbedContent then says again that the first tab is active
         if view is self.shown_view:
             return
@@ -219,14 +218,12 @@ class OutilsApp(BaseApp):
             view.tab_shown()
 
     def _show_credit(self, view: Widget) -> None:
-        """Over the rule: where the mode's data comes from, with a link, or its footnote, or nothing."""
-        text, url = getattr(view, "CREDIT", None) or (getattr(view, "footnote", None), None)
-        self.query_one("#mode-credit").display = bool(text)
-        label = self.query_one("#mode-credit-text", Static)
-        label.update(f"{text} " if url else text or "")
-        label.set_class(url is None, "-footnote")
-        link = self.query_one("#mode-credit-link", Link)
-        link.display = url is not None
-        if url:
+        """Over the rule: where the mode's data comes from, with a link, or nothing."""
+        credit = getattr(view, "CREDIT", None)
+        self.query_one("#mode-credit").display = credit is not None
+        if credit:
+            text, url = credit
+            self.query_one("#mode-credit-text", Static).update(f"{text} ")
+            link = self.query_one("#mode-credit-link", Link)
             link.text = url.removeprefix("https://")
             link.url = url
