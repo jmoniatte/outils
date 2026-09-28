@@ -27,7 +27,7 @@ from ..weather import (
     temperature,
     weather_spans,
 )
-from .lookup_box import LookupBox, lookup_row
+from .lookup_box import LookupBox, completed, lookup_row
 
 # The day's label, its icon and words (as wide as the week's longest, and two spaces), then its high
 # and low, how much it changed, and when it rains. "Wednesday" and three spaces
@@ -117,21 +117,12 @@ class WeatherView(Vertical):
     def _city_submitted(self, event: Input.Submitted) -> None:
         event.stop()
         typed = event.value.strip()
-        city = self._saved(typed)
+        city = completed(typed, self.config.locations)
         if city != typed:
             # The city completed shows in full while it is looked up, until the place found replaces it
             event.input.value = city
         if city:
             self.load(city)
-
-    def _saved(self, typed: str) -> str:
-        """The config's city that what was typed begins, as the box completes it, so Enter takes
-        what it shows; else what was typed."""
-        if typed:
-            for city in self.config.locations:
-                if city.casefold().startswith(typed.casefold()):
-                    return city
-        return typed
 
     @work(exclusive=True)
     async def load(self, location: str) -> None:

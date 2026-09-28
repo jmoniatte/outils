@@ -64,6 +64,16 @@ class LookupBox(Input):
         self.screen.set_focus(None)
 
 
+def completed(typed: str, choices: Iterable[str]) -> str:
+    """The first of choices that typed begins, case ignored, as the box's suggester completes it, so
+    Enter takes what the box shows; else what was typed."""
+    if typed:
+        for choice in choices:
+            if choice.casefold().startswith(typed.casefold()):
+                return choice
+    return typed
+
+
 def lookup_row(label: str, box: LookupBox, *beside: Widget, label_width: int | None = None) -> Horizontal:
     """The label, the box, then what goes beside it; label_width lines the box up with LookupDetails' values."""
     name = Static(label, classes="lookup-label")

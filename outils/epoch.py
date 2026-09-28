@@ -10,7 +10,7 @@ MILLISECONDS = re.compile(r"[+-]?\d{13}")
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 # For "3 days ago": the unit and its length in seconds, largest first
 SPANS = (("year", 365 * 86400), ("day", 86400), ("hour", 3600), ("minute", 60), ("second", 1))
-# What rows gives, in order
+# What rows gives, in order; an extra zone's row goes after Local
 LABELS = ("Seconds", "UTC", "Local", "Relative")
 
 
@@ -61,8 +61,9 @@ def relative(moment: datetime, now: datetime) -> str:
     return f"in {words}" if delta > 0 else f"{words} ago"
 
 
-def rows(moment: datetime, now: datetime, local: tzinfo | None = None) -> list[tuple[str, str]]:
-    """(label, value) for everything the view shows about moment, in LABELS order; local None is the system's zone."""
+def rows(moment: datetime, now: datetime, local: tzinfo | None = None, extra: tuple[str, tzinfo] | None = None) -> list[tuple[str, str]]:
+    """(label, value) for everything the view shows about moment, in LABELS order; local None is the
+    system's zone. extra, a name and a zone, adds the moment there after Local, labelled by the name."""
     # ISO 8601 both: milliseconds only when there are some
     timespec = "milliseconds" if moment.microsecond else "seconds"
     values = (
@@ -71,4 +72,8 @@ def rows(moment: datetime, now: datetime, local: tzinfo | None = None) -> list[t
         moment.astimezone(local).isoformat(timespec=timespec),
         relative(moment, now),
     )
-    return list(zip(LABELS, values, strict=True))
+    found = list(zip(LABELS, values, strict=True))
+    if extra is not None:
+        name, zone = extra
+        found.insert(3, (name, moment.astimezone(zone).isoformat(timespec=timespec)))
+    return found

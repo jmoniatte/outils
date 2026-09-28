@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from functools import cache
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 # The name shown, then its time zone, top to bottom
 DEFAULT_CLOCKS = {
@@ -28,6 +29,8 @@ class Reading:
     offset: str
     # Summer time in force
     dst: bool
+    # IANA, "America/Los_Angeles"
+    zone: str
 
 
 def find_zone(zone: str) -> ZoneInfo | None:
@@ -37,6 +40,30 @@ def find_zone(zone: str) -> ZoneInfo | None:
         return None
 
 
+@cache
+def _zone_keys() -> dict[str, str]:
+    return {key.casefold(): key for key in available_timezones()}
+
+
+# The areas of today's zone names; the rest are old aliases ("US/Pacific") or offsets ("Etc/GMT+5")
+AREAS = ("Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic", "Australia", "Europe", "Indian", "Pacific")
+
+
+@cache
+def suggested_zones() -> list[str]:
+    """The zone names worth suggesting, UTC first, then "Area/City" in order."""
+    return ["UTC", *sorted(key for key in available_timezones() if key.split("/")[0] in AREAS)]
+
+
+def zone_named(text: str) -> Clock | None:
+    """A clock for the IANA time zone text names, case ignored ("Europe/Paris", "utc"), named after
+    its last part ("Paris", "Los Angeles"); None when text names none, such as a city."""
+    key = _zone_keys().get(text.strip().casefold())
+    if key is None:
+        return None
+    return Clock(key.rsplit("/", 1)[-1].replace("_", " "), ZoneInfo(key))
+
+
 def read(clock: Clock, now: datetime) -> Reading:
     """What clock shows at now, which must know its own time zone."""
     local = now.astimezone(clock.zone)
@@ -44,4 +71,5 @@ def read(clock: Clock, now: datetime) -> Reading:
     minutes = int(offset.total_seconds()) // 60
     sign = "-" if minutes < 0 else "+"
     hours, minutes = divmod(abs(minutes), 60)
-    return Reading(clock.name, f"{local:%H:%M}", f"{sign}{hours:02}:{minutes:02}", bool(local.dst()))
+    return Reading(clock.name, f"{local:%H:%M}", f"{sign}{hours:02}:{minutes:02}", bool(local.dst()), clock.zone.key)
+

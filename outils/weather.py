@@ -96,6 +96,8 @@ class Place:
     country: str
     latitude: float
     longitude: float
+    # IANA, "America/Vancouver", for the Time tab; required, so a cache entry from before it is asked again
+    timezone: str
 
     @property
     def label(self) -> str:
@@ -225,7 +227,7 @@ def pick_place(location: str, results: list[dict]) -> Place | None:
 
     # The first of the best, so Open-Meteo's own order breaks ties
     best = max(candidates, key=matched)
-    return Place(best["name"], best.get("admin1", ""), best.get("country", ""), best["latitude"], best["longitude"])
+    return Place(best["name"], best.get("admin1", ""), best.get("country", ""), best["latitude"], best["longitude"], best.get("timezone", ""))
 
 
 def find_place(location: str, cache_file: Path = CACHE_FILE) -> Place:

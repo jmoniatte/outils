@@ -3,7 +3,7 @@
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
 `outils weather`, `outils ip`, `outils sound`, `outils wifi`, `outils dropbox`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
-The calendar shows this month and the next; the time, the time now in a few places and an epoch converter; the weather
+The calendar shows this month and the next; the time, the time now in a few places, and in a city typed, and an epoch converter that also shows a date in any city or time zone; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
 or stops the Dropbox client on this computer and shows the files that changed last; Sound, the
 outputs and microphones through `pactl`, a simplified pavucontrol; Wi-Fi, the networks through
@@ -183,12 +183,26 @@ kept as calendar's number (Monday 0). An unknown day is a warning in the footer 
 
 ## Time
 
-`TimeView` holds a `ClocksView` over an epoch converter (below), a row per clock: its name, the time there, its offset from
+`TimeView` holds a `ClocksView`, a row per clock, then a city row (below), over an epoch converter (below). A row is its name, the time there, its offset from
 UTC in orange (the weather's high temperature color) and, while summer time is in force, Nerd
-Font's sun (the weather tab's) in yellow. The clocks are `clocks` in `config.yaml`, names mapped to IANA time zones in the order shown; the default is
+Font's sun (the weather tab's) in yellow, then the IANA time zone in grey, lined up whether the sun
+shows or not. The name column is a fixed 20 wide (`clocks_view.NAME_WIDTH`), a longer name cut with
+"…" (`fit_name`), so the city box in it, and the epoch's values, line up with the times. The clocks are `clocks` in `config.yaml`, names mapped to IANA time zones in the order shown; the default is
 Portland, Chicago, UTC and Strasbourg. A zone Python's `zoneinfo` does not know is a warning in
 the footer and is left out. The view checks the time every second and redraws when the minute
-turns; it makes no request.
+turns; it makes no request but for a city.
+
+The last row (`#city-row`) is a box in the name column, "Add a city or zone", like the Weather
+tab's City box, and the rest of the row a second `ClocksView` with no names (`#city-clock`):
+Enter shows the city's time there, and the box its short name in blue. An IANA time zone works
+too, case ignored ("Europe/Paris", "utc"): it is
+checked first (`clocks.zone_named`, against `zoneinfo.available_timezones`), needs no request, and
+is named after its last part ("Paris"). The boxes suggest the Weather tab's `locations`, then the
+time zones (`clocks.suggested_zones`: UTC and today's "Area/City" names, not `Etc/` offsets or old
+aliases). `→` or `tab` takes any suggestion; Enter takes a city's, but a zone's only once a "/"
+is typed (`TimeView._completed`), so "Eu" is still looked up as a town, not Europe/Amsterdam. Otherwise the time zone comes from Open-Meteo's geocoding (`weather.find_place`,
+`Place.timezone`), so a city looked up once, on either tab, costs no request after. "Looking up..." (grey) or why it failed (red) takes the
+row's place meanwhile; Enter on an empty box takes the row away. The city is not saved.
 
 The Time, Weather and IP tabs share a layout, in `widgets/lookup_box.py`: a row
 (`lookup_row`) with a green label and a `LookupBox` to type in, over what was found. On Time and
@@ -210,6 +224,13 @@ past year 33000); anything else goes to `datetime.fromisoformat`, and a date wit
 local time, the system's (summer time included, through `astimezone`). An empty box, or `now`,
 is now.
 
+After Now on the same row, an In box takes a city or a time zone, as the city row does
+(`time_view.find_clock`), and adds the date there as one more row after Local, labelled by its
+name. The labels are as wide as the clocks' names (`EpochDetails`, `NAME_WIDTH`), so the values
+line up with the times and the name has room. "Looking up..." or why it failed (red,
+`EpochDetails.error_row`) takes that row's place meanwhile; Enter on an empty In box takes the
+row away. With a city and an In zone showing, the tab has no row to spare in the pop-up.
+
 ## Weather
 
 `weather.py` talks to Open-Meteo through `web.get_json` (urllib), no account and no key; its
@@ -221,7 +242,7 @@ expected, caught around the parsing, not field by field. A cache entry of anothe
 `config.yaml`, a list of cities (`Portland, OR` alone by default; an old single `location:` is read
 as a list of one, and a bad entry is a warning in the footer and left out). Typing in the box
 completes those cities, the rest in grey (Textual's `SuggestFromList`, case ignored): `→` or `tab` takes it,
-and so does Enter (`WeatherView._saved`), since the `Input` itself would submit only what was typed;
+and so does Enter (`lookup_box.completed`), since the `Input` itself would submit only what was typed;
 the box then shows the city in full while it is looked up.
 Enter looks up what was typed otherwise, any city at all; the forecast on show
 stays until the new one comes. A forecast older than `MAX_AGE` (an hour, by wall time so a night's
@@ -240,7 +261,8 @@ in full or by initials ("BC", "Hong Kong" for HK), or a US state or Canadian pro
 postal code (`REGION_CODES`: "OR", "ME", "QC"). A single word never matches by its first letter,
 or "ME" would find Multnomah County. A place's own label ("Portland, Maine, United States"), as
 the box shows it, finds that place again, so Enter on an untouched box is harmless. The result is cached in
-`~/.cache/outils/places.json` (`outils.CACHE_DIR`), keyed by the location text, so opening
+`~/.cache/outils/places.json` (`outils.CACHE_DIR`), keyed by the location text, with its IANA time zone for the Time tab (an entry from before that
+field is asked again), so opening
 the pop-up costs one request. `units` is `metric` (the default) or `imperial`. The forecast is
 always asked in metric and converted when drawn (`weather.temperature`, `weather.speed`), so °C
 and °F, right of the City box (`#weather-units`, buttons that cannot take focus, the one in use in
