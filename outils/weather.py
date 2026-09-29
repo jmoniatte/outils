@@ -5,7 +5,8 @@ Every call blocks; the app runs them with asyncio.to_thread.
 
 import json
 import unicodedata
-from dataclasses import asdict, dataclass
+from collections import Counter
+from dataclasses import asdict, dataclass, replace
 from typing import NamedTuple
 from datetime import date, datetime
 from pathlib import Path
@@ -29,6 +30,16 @@ MAX_SPANS = 2
 SNOW_BELOW = 1.0
 # What a span that joins two kinds becomes: the one that matters most
 SEVERITY = ("rain", "snow", "storm")
+# The hours, 8am to 8pm, whose most common sky names a dry day: the daily code is the day's worst
+# hour, so an evening of thin cloud made a sunny day "Overcast"
+DAYTIME = range(8, 20)
+# A dry day says when its sky is the opposite of its words ("Overcast 5pm–10pm" on a Clear day) in
+# these hours, 7am to 10pm, for a span of at least SKY_SPAN hours; shorter ones are noise
+SKY_HOURS = range(7, 22)
+SKY_SPAN = 4
+# The codes of the opposite sky: overcast hours on a clear day, clear hours on an overcast one; a
+# partly cloudy day, or hour, has none
+OPPOSITE_SKY = {0: ("overcast", {3}), 1: ("overcast", {3}), 3: ("clear", {0, 1})}
 # Where a location, once found, is kept, so opening the pop-up costs one request, not two
 CACHE_FILE = CACHE_DIR / "places.json"
 
@@ -294,7 +305,43 @@ def parse_forecast(place: Place, data: dict) -> Forecast:
         )
         for i in range(len(hourly["time"]))
     ]
+    days = [replace(day, code=_sky(day, hours)) for day in days]
     return Forecast(place, current, days, hours)
+
+
+def _sky(day: Day, hours: list[Hour]) -> int:
+    """The day's code: its own when it says rain, snow, fog or a storm, else the sky of most of its daytime hours, the cloudier on a tie."""
+    if day.code > 3:
+        return day.code
+    codes = Counter(
+        hour.code for hour in hours
+        if hour.time.date() == day.day and hour.time.hour in DAYTIME and hour.code in (0, 1, 2, 3)
+    )
+    if not codes:
+        return day.code
+    return max(codes, key=lambda code: (codes[code], code))
+
+
+def sky_spans(forecast: Forecast, index: int) -> list[Span]:
+    """When the sky of the dry day at index is the opposite of its words, at most MAX_SPANS of the longest,
+    in order; today counted from the hour begun."""
+    day = forecast.days[index]
+    if day.code not in OPPOSITE_SKY:
+        return []
+    kind, codes = OPPOSITE_SKY[day.code]
+    begun = forecast.current.time.replace(minute=0, second=0, microsecond=0)
+    spans: list[Span] = []
+    for hour in forecast.hours:
+        if hour.time.date() != day.day or hour.time < begun or hour.time.hour not in SKY_HOURS or hour.code not in codes:
+            continue
+        start = hour.time.hour
+        if spans and spans[-1].end == start:
+            spans[-1] = spans[-1]._replace(end=start + 1)
+        else:
+            spans.append(Span(kind, start, start + 1))
+    long = [span for span in spans if span.end - span.start >= SKY_SPAN]
+    longest = sorted(long, key=lambda span: span.end - span.start, reverse=True)[:MAX_SPANS]
+    return [span for span in long if span in longest]
 
 
 def temperature(celsius: float, units: str) -> float:

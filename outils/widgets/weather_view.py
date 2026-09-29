@@ -23,6 +23,7 @@ from ..weather import (
     WeatherError,
     describe,
     forecast,
+    sky_spans,
     speed,
     temperature,
     weather_spans,
@@ -30,7 +31,8 @@ from ..weather import (
 from .lookup_box import LookupBox, completed, lookup_row
 
 # The day's label, its icon and words (as wide as the week's longest, and two spaces), then its high
-# and low, how much it changed, and when it rains. "Wednesday" and three spaces
+# and low, how much it changed, and when it rains (on a dry day, when the sky is unlike its words).
+# "Wednesday" and three spaces
 DAY_LABEL = 12
 # Before when it rains
 GAP = " " * 4
@@ -225,8 +227,8 @@ class ForecastView(Widget):
                 gap = CHANGE_GAP
             # Every row is as wide up to here, whatever it says after
             rule = line.cell_len
-            # Nothing on a dry day, as for a day with no change worth saying
-            spans = weather_spans(self.forecast, index)
+            # Rain, snow or a storm first; else a sky unlike the day's words; else nothing
+            spans = weather_spans(self.forecast, index) or sky_spans(self.forecast, index)
             if spans:
                 line.append(gap)
                 line.append_text(self._spans(spans))
@@ -250,8 +252,10 @@ class ForecastView(Widget):
         return Text(f"{'↑' if warmer else '↓'}{abs(difference):>2}°", style=self._style("high" if warmer else "low"))
 
     def _spans(self, spans: list[Span]) -> Text:
-        """Each span in its kind's color, as its icon is: "Rain 5pm–6pm, snow 8pm–10pm"."""
-        return Text(", ", style=self._style("dim")).join(Text(words, style=self._style(f"sky-{kind}")) for kind, words in _said(spans))
+        """Each span in its kind's color, as its icon is: "Rain 5pm–6pm, snow 8pm–10pm"; clear yellow, overcast as clouds."""
+        return Text(", ", style=self._style("dim")).join(
+            Text(words, style=self._style(f"sky-{'cloud' if kind == 'overcast' else kind}")) for kind, words in _said(spans)
+        )
 
 
 def _said(spans: list[Span]) -> list[tuple[str, str]]:

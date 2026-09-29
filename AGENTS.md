@@ -317,8 +317,14 @@ the amount expected, not the chance, so a likely hour can have a dry one, and is
 `SNOW_BELOW` (1°C) or under, else rain. A new kind starts a new span; a dry spell shorter than
 `DRY_SPELL` (2 hours) does not split a span of one kind. A day keeps at most `MAX_SPANS` (2): the
 shortest dry spell between two of a kind is closed first, else the shortest of all, the joined
-span taking the kind that matters most (storm, then snow, then rain), so a row stays short. The days are the forecast's own dates (`timezone=auto`, the place's time
-zone), so the first is "Today" there, whatever the date here. Icons are Nerd Font weather glyphs,
+span taking the kind that matters most (storm, then snow, then rain), so a row stays short.
+A dry day's words come from the sky most of its hours from 8am to 8pm show (`weather.DAYTIME`,
+the cloudier on a tie), not from Open-Meteo's daily code, which is the day's worst hour: an
+evening of thin cloud made a sunny day "Overcast". Rain, snow, fog or a storm keep the daily
+code. A dry day with no rain span says instead when its sky is the opposite of its
+words (`weather.sky_spans`), colored as the icons are (clear yellow, overcast `$fg`): overcast hours on a Clear or Mostly clear
+day, clear ones on an Overcast day ("Overcast 5pm–10pm"), from 7am to 10pm (`SKY_HOURS`), in
+spans of `SKY_SPAN` (4) hours or more, the `MAX_SPANS` longest; partly cloudy counts as neither. The days are the forecast's own dates (`timezone=auto`, the place's time zone), so the first is "Today" there, whatever the date here. Icons are Nerd Font weather glyphs,
 as the Sound tab uses Nerd Font battery icons; a clear night gets the moon. The colors come from
 TCSS through the view's component classes (high orange, low cyan), the icons by what
 they show (`weather.SKIES`): a clear sky, sun or moon, yellow, clouds and fog light grey (`$fg`), rain blue,

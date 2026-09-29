@@ -8,7 +8,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 from outils import weather
-from outils.weather import IMPERIAL, METRIC, Place, WeatherError, describe, find_place, parse_forecast, pick_place, weather_spans
+from outils.weather import IMPERIAL, METRIC, Place, WeatherError, describe, find_place, parse_forecast, pick_place, sky_spans, weather_spans
 
 VICTORIA_BRAZIL = {"name": "Vitória", "latitude": -20.3, "longitude": -40.3, "country_code": "BR", "country": "Brazil", "admin1": "Espírito Santo"}
 VICTORIA_BC = {"name": "Victoria", "latitude": 48.4, "longitude": -123.4, "country_code": "CA", "country": "Canada", "admin1": "British Columbia", "timezone": "America/Vancouver"}
@@ -100,6 +100,18 @@ def spans_of(chances, codes=None, temperatures=None):
     return weather_spans(parse_forecast(PLACE, {**FORECAST, "hourly": hourly}), 1)
 
 
+def sky_of(codes, chances=None):
+    """The sky spans and the rain spans of tomorrow, 2026-09-25, with these codes and chances by hour."""
+    hourly = {
+        "time": [f"2026-09-25T{hour:02}:00" for hour in range(24)],
+        "precipitation_probability": chances or [0] * 24,
+        "weather_code": codes,
+        "temperature_2m": [15.0] * 24,
+    }
+    found = parse_forecast(PLACE, {**FORECAST, "daily": {**FORECAST["daily"], "weather_code": [0, 3]}, "hourly": hourly})
+    return sky_spans(found, 1), weather_spans(found, 1)
+
+
 class ForecastTest(unittest.TestCase):
     def test_parse_forecast_reads_now_and_every_day(self):
         result = parse_forecast(PLACE, FORECAST)
@@ -108,6 +120,32 @@ class ForecastTest(unittest.TestCase):
         self.assertEqual(result.days[1].high, 13.2)
         self.assertEqual(result.current.time, datetime(2026, 9, 24, 21, 15))
         self.assertEqual((result.hours[3].time, result.hours[3].rain_chance), (datetime(2026, 9, 24, 22), None))
+
+    def test_a_dry_day_is_named_by_most_of_its_daytime_hours_not_its_worst(self):
+        # Clear all day, thin cloud from 5pm: Open-Meteo's daily code says Overcast
+        codes = [0] * 17 + [3] * 5 + [0, 1]
+        daily = {**FORECAST["daily"], "weather_code": [61, 3]}
+        hourly = {
+            "time": [f"2026-09-25T{hour:02}:00" for hour in range(24)],
+            "precipitation_probability": [0] * 24, "weather_code": codes, "temperature_2m": [15.0] * 24,
+        }
+        days = parse_forecast(PLACE, {**FORECAST, "daily": daily, "hourly": hourly}).days
+        self.assertEqual([day.code for day in days], [61, 0])
+        # A tie goes to the cloudier; rain keeps the daily code
+        codes = [0] * 14 + [2] * 10
+        hourly["weather_code"] = codes
+        self.assertEqual(parse_forecast(PLACE, {**FORECAST, "daily": daily, "hourly": hourly}).days[1].code, 2)
+        daily["weather_code"] = [61, 63]
+        self.assertEqual(parse_forecast(PLACE, {**FORECAST, "daily": daily, "hourly": hourly}).days[1].code, 63)
+
+    def test_a_dry_day_says_when_its_sky_is_the_opposite_of_its_words(self):
+        # Clear, overcast from 6pm to 10pm, the window's end; noon to 3pm is too short, 11pm past the window
+        self.assertEqual(sky_of([0] * 12 + [3] * 3 + [0] * 3 + [3] * 6)[0], [("overcast", 18, 22)])
+        # Overcast most of the day, clear 7am to 11am and 6pm to 10pm
+        self.assertEqual(sky_of([3] * 7 + [0] * 4 + [3] * 7 + [1] * 6)[0], [("clear", 7, 11), ("clear", 18, 22)])
+        # Partly cloudy hours are not clear; rain spans are there for the view to show first
+        sky, rain = sky_of([2] * 12 + [3] * 12, [0] * 12 + [80] * 12)
+        self.assertEqual((sky, rain), ([], [("rain", 12, None)]))
 
     def test_rain_is_likely_in_spans_of_hours_of_40_percent_or_more(self):
         result = parse_forecast(PLACE, FORECAST)
