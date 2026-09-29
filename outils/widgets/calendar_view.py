@@ -131,7 +131,10 @@ class CalendarView(Vertical, can_focus=True):
         self.year = self.today.year
         self.month = self.today.month
         self.picked = self.today
-        self.asked = False
+        # The city last asked for, and whether it is being looked up: asked again when the tab shows,
+        # as long as none was found, so a failure (no network) does not stay
+        self.wanted = config.location
+        self.loading = False
         self.locations = config.locations
         self.birthdays = config.birthdays
         # The city in the box, found the first time the tab shows: the first of the config's
@@ -171,10 +174,10 @@ class CalendarView(Vertical, can_focus=True):
 
     def tab_shown(self) -> None:
         self.check_today()
-        # Found the first time its tab shows, so opening another tab costs no lookup
-        if not self.asked:
-            self.asked = True
-            self.load(self.locations[0])
+        # Found the first time its tab shows, so opening another tab costs no lookup; again on a later
+        # show while none was found
+        if self.place is None and not self.loading:
+            self.load(self.wanted)
 
     def check_today(self) -> None:
         self.set_today(date.today())
@@ -207,11 +210,14 @@ class CalendarView(Vertical, can_focus=True):
         """Find location, cached once found here or on the Weather tab, so seldom a request; the
         city on show stays until it is found. Until a first is found, there is no sun, no holiday,
         and the full moon and DST are by the system's clock."""
+        self.wanted, self.loading = location, True
         try:
             self.place = await asyncio.to_thread(find_place, location)
         except WeatherError as error:
             self.app.notify(str(error), severity="error", timeout=10)
             return
+        finally:
+            self.loading = False
         self.query_one(LookupBox).show_found(self.place.label)
         self.show_day()
         # The yellow days follow the city: its holidays, its DST, the full moon in its time zone

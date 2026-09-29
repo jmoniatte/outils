@@ -189,7 +189,9 @@ tab's, and its `lookup_row`, with no label but the box where "City" would put it
 `places.json` once found here or on the Weather tab, so seldom a request; "Data by open-meteo.com"
 credits it). Once found, the place replaces the text, in blue. A city not found is an error in
 the footer, and the one on show stays. The first is found the first time the tab shows
-(`CalendarView.load`); until then there is no sun and no holiday, and the full moon and DST are
+(`CalendarView.load`), and while none is found (Open-Meteo down, no network) the city last asked
+for (`wanted`) is asked again each time the tab shows, one lookup at a time (`loading`); until
+then there is no sun and no holiday, and the full moon and DST are
 by the system's time zone. The box is not saved. It sits under the months, a blank row between,
 unlike the Weather and Time tabs where it comes first: the calendar is what the tab is for, the
 city is seldom changed, and it sits over its credit. The months come right under the events line,

@@ -1,29 +1,48 @@
 # outils
 
 Everyday tools in the terminal, one tab each: a calendar, clocks, the weather forecast, this
-computer's public IP, the Dropbox client's sync, the sound devices, Wi-Fi and, for fun, the Game of Life and snake. The calendar
-shows this month and the next side by side like `cal`, with today
-highlighted. **← Previous** and **Next →** (or the arrow keys) move a month at a time, and
-**Today**, shown once the current month is off screen, comes back to the current month.
-Today's date, in full, is at the bottom right.
+computer's public IP, the Dropbox client's sync, the sound devices, Wi-Fi and, for fun, the Game
+of Life and snake.
+
+The calendar shows this month and the next side by side like `cal`, with today highlighted. The
+arrows beside the month names (or the `←` and `→` keys) move a month at a time. Click a day to
+pick it: over the months it shows that day in full, its sunrise and sunset, and what happens on
+it, a full moon, the day summer time starts or ends ("DST starts", "DST ends"), public holidays
+and birthdays (see `birthdays` below). Days with something on them are yellow, a birthday shows a
+cake in place of its number, and days before today are grey. A picked day that leaves the view
+moves along to the same day of a month still shown. Under the months, the City box says where
+the sun, DST and holidays are for: it opens on your first `location`, and you can type another
+city and press Enter. Holidays are those of the city's country, in its own language, with its
+state's or province's in the US and Canada. The green **Today** button under it, shown once
+another day is picked, goes back to today.
 
 The Time tab gives the time now in a few places, with the offset from UTC and a yellow sun while
-summer time is in force (see `clocks` below). Under the clocks, the Epoch box converts an epoch
-timestamp to a date, or a date to a timestamp: click it, type `1790222400` (seconds; 13 digits are milliseconds) or `2026-09-24 15:30` (local time, unless it ends in `Z` or an offset like
-`+02:00`) and press Enter. It shows the current time, ticking, until you use it; the green
-**Now** button next to it, or Enter on an empty box, goes back to it.
+summer time is in force (see `clocks` below); the last row's name is a box to add any city or
+time zone (`Paris`, `Asia/Tokyo`) for as long as outils runs. Under the clocks, the Time box
+converts an epoch timestamp to a date, or a date to a timestamp: click it, type `1790222400`
+(seconds; 13 digits are milliseconds) or `2026-09-24 15:30` (local time, unless it ends in `Z` or
+an offset like `+02:00`) and press Enter. It shows how long ago or from now that is, the
+timestamp, and the date in UTC and here, each with its offset and the summer-time sun; the last
+row's label is a box to see it in one more city or time zone. It shows the current time, ticking,
+until you use it; the green **Now** button next to it, or Enter on an empty box, goes back to it.
 
-The weather shows the conditions now and a row per day for a week, from
-[Open-Meteo](https://open-meteo.com) (free, no account). It opens on your `location` (Portland, OR
-unless you set one, see below); the place found shows in the City box, in blue. Click the box, type
-another place and press Enter to look it up, or Escape to leave the box. **°C** and **°F**, next
-to the box, switch the units (wind and rain too); the one in use is blue, and the choice is saved.
-The weather icons need a [Nerd Font](https://www.nerdfonts.com).
+The weather shows the conditions now and a row per day for 10 days, from
+[Open-Meteo](https://open-meteo.com) (free, no account): the high and the low, how much warmer or
+cooler than the day before when it is noticeable, and when rain, snow or a storm is likely
+("Rain 8am–1pm"); on a dry day, when the sky turns the other way ("Overcast 5pm–10pm" on a clear
+day). It opens on your first `location` (Portland, OR unless you set one, see below); the place
+found shows in the City box, in blue. Click the box, type another place (your other `locations`
+are suggested; `→` or `Tab` takes one) and press Enter to look it up, or Escape to leave the box.
+**°C** and **°F**, next to the box, switch the units; the one in use is blue, and the choice is
+saved. The weather icons need a [Nerd Font](https://www.nerdfonts.com).
 
 The IP mode shows the public (WAN) address this computer reaches the internet from, with what
-[ipinfo.io](https://ipinfo.io) knows about it: host name, city, region, country, postal code,
-location, time zone and network. It needs no account. Click the IP box, type another address or
-a host name and press Enter to look it up; an empty box goes back to this computer's address.
+[ipinfo.io](https://ipinfo.io) knows about it: host name, city, location, time zone and network.
+It needs no account. Click the IP box, type another address or a host name and press Enter to
+look it up; an empty box goes back to this computer's address. For a host name, it also shows
+its domain's registration (a whois), under a dashed line, from [RDAP](https://rdap.org): the
+registrar, the registrant when the registry publishes it, when it was registered and when it
+expires, and its name servers.
 
 The Dropbox tab shows the 200 files that changed last in the Dropbox folder, the latest first. Over
 the list, on the right, it shows whether the Dropbox app on this computer is running, with a **Stop Dropbox**
@@ -101,12 +120,17 @@ Nothing is required. Press `t` to browse the themes: each one applies as the cur
 ```yaml
 theme: one-light
 week_start: sunday       # the calendar's first column; monday by default
-location: Victoria, BC   # where the weather opens; Portland, OR by default
+locations:               # the weather and the calendar open on the first; the others are suggested
+  - Victoria, BC
+  - Strasbourg, FR
 units: imperial          # metric by default; °C and °F on the Weather tab set it
 clocks:                  # the Time tab, top to bottom: a name, then its time zone
   Home: America/Vancouver
   UTC: UTC
   Tokyo: Asia/Tokyo
+birthdays:               # shown on the calendar every year: MM-DD, or YYYY-MM-DD to show the age
+  10-02: Mom
+  1990-11-05: Léa
 ```
 
 A place is "City", or "City, Region or Country" when the name is shared; US states and Canadian

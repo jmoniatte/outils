@@ -16,10 +16,19 @@ clocks:
   UTC: UTC
   Strasbourg: Europe/Paris
 
-# Where the weather opens (Portland, OR by default): "City", or "City, Region or Country" when
-# the name is shared (Portland, ME; Paris, France). Looked up once through Open-Meteo, then cached.
-location: Portland, OR
+# Your cities (Portland, OR by default): the weather and the calendar open on the first, and the
+# City boxes suggest the others as you type. "City", or "City, Region or Country" when the name is
+# shared (Portland, ME; Paris, France). Each is looked up once through Open-Meteo, then cached.
+locations:
+  - Portland, OR
+  - Strasbourg, FR
 
 # metric (°C, km/h, mm; the default) or imperial (°F, mph, in). °C and °F on the Weather tab
 # switch it and save the choice here.
 units: metric
+
+# Birthdays, shown on the calendar every year with a cake: MM-DD, or YYYY-MM-DD with the year
+# born to show the age ("Léa (36)").
+birthdays:
+  10-02: Mom
+  1990-11-05: Léa

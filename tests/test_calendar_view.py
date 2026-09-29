@@ -332,10 +332,19 @@ class CalendarViewTest(unittest.TestCase):
 
         self.run_view(body, Config(birthdays=birthdays))
 
-    def test_without_the_place_there_is_no_sun(self):
+    def test_without_the_place_there_is_no_sun_and_it_is_asked_again_when_the_tab_shows(self):
         async def body(app, pilot):
             await settle(app, pilot)
             self.assertEqual(app.query_one("#calendar-sun").render().plain, "")
+            self.assertEqual(app.messages, ["offline"])
+            # Back online, the next show finds it; once found, a show asks nothing
+            self.find_place.side_effect, self.find_place.return_value = None, PORTLAND
+            for _ in range(2):
+                app.view.tab_shown()
+                await settle(app, pilot)
+            self.assertEqual(self.find_place.call_count, 2)
+            self.assertEqual(self.find_place.call_args.args, ("Portland, OR",))
+            self.assertEqual(app.query_one("#calendar-sun").render().plain, "\U000f059c 7:00am   \U000f059b 7:05pm")
 
         self.run_view(body, place=WeatherError("offline"))
 
