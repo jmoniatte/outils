@@ -199,8 +199,6 @@ class OutilsApp(BaseApp):
         self.mode = pane.id.removesuffix("-mode")
         view = pane.children[0]
         self._show_credit(view)
-        # A view with a first row of its own (the calendar's date) takes the blank row under the tabs
-        self.query_one("#modes", TabbedContent).set_class(getattr(view, "UNDER_TABS", False), "-under-tabs")
         # Once per switch: on mount, TabbedContent then says again that the first tab is active
         if view is self.shown_view:
             return

@@ -1,8 +1,9 @@
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
-from outils.config import Config, load_config, save_units
+from outils.config import Birthday, Config, load_config, save_units
 
 
 class ConfigTest(unittest.TestCase):
@@ -63,6 +64,18 @@ class ConfigTest(unittest.TestCase):
         wrong = self.load("clocks: [Europe/Paris]\n")
         self.assertEqual(wrong.clocks, Config().clocks)
         self.assertEqual(len(wrong.warnings), 1)
+
+    def test_birthdays_map_dates_to_names_every_year_and_bad_dates_warn(self) -> None:
+        self.assertEqual(Config().birthdays, [])
+        set_up = self.load("birthdays:\n  10-02: Mom\n  1990-10-15: Léa\n  02-29: Leap\n  13-01: Nope\n")
+        self.assertEqual(set_up.birthdays, [Birthday("Mom", 10, 2), Birthday("Léa", 10, 15, 1990), Birthday("Leap", 2, 29)])
+        self.assertEqual(set_up.warnings, ["birthdays: '13-01' is not a date, such as 10-02 or 1990-10-02"])
+        # Every year from the year born, with the age that year
+        lea = Birthday("Léa", 10, 15, 1990)
+        self.assertEqual([lea.falls_on(date(year, 10, 15)) for year in (1989, 1990, 2027)], [False, True, True])
+        self.assertEqual([lea.label(date(year, 10, 15)) for year in (1990, 2027)], ["Léa (born)", "Léa (37)"])
+        self.assertEqual(Birthday("Mom", 10, 2).label(date(2027, 10, 2)), "Mom")
+        self.assertEqual(len(self.load("birthdays: [10-02]\n").warnings), 1)
 
 
 if __name__ == "__main__":

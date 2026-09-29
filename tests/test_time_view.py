@@ -101,7 +101,7 @@ class TimeViewTest(unittest.TestCase):
         self.run_view(body)
 
     def test_a_city_typed_in_the_last_row_shows_its_time_there(self):
-        tokyo = Place("Tokyo", "Tokyo", "Japan", 35.7, 139.7, "Asia/Tokyo")
+        tokyo = Place("Tokyo", "Tokyo", "Japan", 35.7, 139.7, "Asia/Tokyo", "JP")
 
         async def body(app, pilot, view):
             row = app.query_one("#city-clock")
@@ -150,7 +150,7 @@ class TimeViewTest(unittest.TestCase):
         self.run_view(body, Config(locations=["Portland, OR", "Tokyo, Japan"]))
 
     def test_a_city_or_time_zone_typed_in_the_last_label_shows_the_date_there(self):
-        quebec = Place("Québec", "Quebec", "Canada", 46.8, -71.2, "America/Toronto")
+        quebec = Place("Québec", "Quebec", "Canada", 46.8, -71.2, "America/Toronto", "CA")
 
         async def body(app, pilot, view):
             value = app.query_one("#zone-value")

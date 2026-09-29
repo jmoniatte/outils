@@ -3,7 +3,7 @@
 TUI with everyday tools, one tab each: `outils calendar` (the default), `outils time`,
 `outils weather`, `outils ip`, `outils sound`, `outils wifi`, `outils dropbox`, `outils life` or `outils snake` says which tab it opens on.
 It opens as a small pop-up from a status-bar block, so each block opens on the tab it is about.
-The calendar shows this month and the next, and what happened on the day clicked, from Wikipedia; the time, the time now in a few places, and in a city typed, and an epoch converter that also shows the date in any city or time zone; the weather
+The calendar shows this month and the next, and the day clicked: its sunrise and sunset, and a full moon or DST change; the time, the time now in a few places, and in a city typed, and an epoch converter that also shows the date in any city or time zone; the weather
 shows now and the next days, from Open-Meteo; the IP mode shows what ipinfo.io knows about an address, the public one by default; Dropbox starts
 or stops the Dropbox client on this computer and shows the files that changed last; Sound, the
 outputs and microphones through `pactl`, a simplified pavucontrol; Wi-Fi, the networks through
@@ -78,19 +78,21 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     app.py              # OutilsApp, a tui-kit BaseApp: MODES, the footer and its messages, the keys
     __main__.py         # The command line: which tab to open on
     config.py           # Optional ~/.config/outils/config.yaml (theme, through tui_kit.config; week_start,
-                        # clocks, locations, units)
+                        # clocks, locations, units,
+                        # birthdays)
     clocks.py           # The time, offset and summer time in an IANA time zone; no Textual
     epoch.py            # Epoch timestamps to dates and back; no Textual
     months.py           # The month grids, shift_month and the day labels; no Textual
     weather.py          # Open-Meteo: finding the place, the forecast, the weather codes; no Textual
+    sky.py              # Sunrise, sunset and the full moon on any day, worked out here; no Textual
+    public_holidays.py  # A place's public holidays (its country's, its state's in the US and Canada), through the holidays package; no Textual
     life.py             # The Game of Life's rules on a grid that wraps around; no Textual
     snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
     command.py          # Runs a tab's command (pactl, bluetoothctl, nmcli) through tui-kit, failures as the tab's error; no Textual
     click_only.py       # Widgets a click must not give focus to, so the view keeps its keys; quick_button takes every click
-    web.py              # JSON from a web service (Open-Meteo, ipinfo.io, Wikipedia) with urllib, outils's User-Agent, failures as the tab's error; no Textual
+    web.py              # JSON from a web service (Open-Meteo, ipinfo.io) with urllib, outils's User-Agent, failures as the tab's error; no Textual
     reload.py           # A view's reload one at a time: a timer tick while one runs is skipped, a request runs it again after; no Textual
     remote.py           # `outils --show <mode>`: tell an outils already running which tab to show, over a Unix socket; no Textual
-    history.py          # Wikipedia's "On this day": the events on a day of the year; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
     dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
     pactl.py            # Every pactl call and the parsing of its JSON output; no Textual
@@ -136,11 +138,10 @@ over the rest of the line (an error wraps onto up to three lines), and Help come
 A view with a `CREDIT`, its words and its site's URL, has it shown in grey at the right, over
 the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlined on hover like
 every link: "Data by open-meteo.com" on the Weather tab
-(its CC BY 4.0 license asks for it) and on the Time tab, whose cities it finds, "Data by ipinfo.io" on the IP tab and "Data by wikimedia.org"
-on the calendar, for Wikipedia's events (CC BY-SA); the other tabs have none,
+(its CC BY 4.0 license asks for it) and on the Time and Calendar tabs, whose cities it finds, "Data by ipinfo.io" on the IP tab; the other tabs have none,
 so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
-`calendar_view.events`, `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
+`calendar_view.find_place`, `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
 `dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder,
 `pactl.mixer` and `bluetooth.headsets` so none runs `pactl` or `bluetoothctl`, and the
 `nmcli` functions so none runs `nmcli`.
@@ -158,13 +159,16 @@ mode is a view in `widgets/` and an entry in `MODES`;
 ## Calendar
 
 `CalendarView` puts `before` + 1 + `after` `MonthView`s side by side (0 and 1 by default), the
-month in focus first, under today's date and the Previous and Next buttons; it starts on today's
+month in focus first, over a City box and under the day picked, its sun and events, with a green `←`
+button left of them and `→` right, on the months' name row, two columns away; it starts on today's
 month. outils stays open for days, so `CalendarView.set_today` reads the date again every minute
 (`check_today`) and when its tab shows (`tab_shown`, which calls it): today's highlight moves, and a calendar on today's old month follows
-to the new one, while a month picked by hand stays. Tests pass `today=` and call `set_today`. `CalendarView.action_shift(delta)` moves them all (Previous, Next, `←` and `→`), and
-`show_month` puts any month in focus (`go_today`, a click on the date). The buttons cannot take focus, so the calendar keeps it and its keys work after
-a click. The button row is as wide as the months (`width: 100%` of an auto-width parent), and
-Previous and Next share a width. Each `MonthView` is laid out like
+to the new one, while a month picked by hand stays. Tests pass `today=` and call `set_today`. `CalendarView.action_shift(delta)` moves them all (the arrow buttons, and the `←` and `→` keys); a
+day picked that leaves the view comes along to the same day of the nearest month shown (a 31st
+becomes the month's last day), so one is always on show. And
+`show_month` puts any month in focus. The buttons cannot take focus, so the calendar keeps it and its keys work after
+a click. The date, sun and events center over the months and
+their arrows (`#calendar-body`, auto width). Each `MonthView` is laid out like
 `cal`, with room to read it: every day sits in a four-column cell (its two digits and a space on
 each side), so a month is 28 columns wide and two need 58. Top
 to bottom: the name centered, a blank row, the day names, a dashed rule under them, then always
@@ -178,25 +182,48 @@ number always means past. The colors come
 from TCSS through `MonthView`'s component classes, so a theme change repaints them with no
 `apply_theme` override.
 
-Under the months (`#calendar-history`, the tab's whole width), something that happened on the day
-picked, in a past year: the year in bold blue, then the event, wrapped beside it, on
-`HISTORY_LINES` (3) lines at most. An event that fits is picked over one that does not; with none,
-it is cut at a word with "…", and wrapped and cut again when the view is resized. Today is picked at first; a click
-on a day picks it (`MonthView.day_at` finds the day from the click's place, since a month is one
-piece of text), and a picked day other than today gets a light blue cell (`month--picked`). A click on
-the date picks today again. There is no key for it. `history.events` asks Wikipedia's "On this day" for the events its editors
-picked (`onthisday/selected/MM/DD`, no account or key, but it refuses urllib's own User-Agent, so
-`web.get_json` sends outils's). The answer is by day of the year, not by year, so every September
-27 gives the same list. `CalendarView.show_history` waits for it in a thread, so the calendar
-works meanwhile ("Asking Wikipedia about..." in grey; a failure in red, in its place). The events
-are kept per day while outils runs, so a day clicked again costs no request and shows another
-event, picked at random. A new day moves the pick to the new today if it was on the old one.
+The calendar is about the city in its City box (`#calendar-city`), a `LookupBox` like the Weather
+tab's, and its `lookup_row`, with no label but the box where "City" would put it: it opens on the first of `locations`, suggests them as it is typed
+(`→`, `tab` or Enter takes one), and Enter finds any other through `weather.find_place` (from
+`places.json` once found here or on the Weather tab, so seldom a request; "Data by open-meteo.com"
+credits it). Once found, the place replaces the text, in blue. A city not found is an error in
+the footer, and the one on show stays. The first is found the first time the tab shows
+(`CalendarView.load`); until then there is no sun and no holiday, and the full moon and DST are
+by the system's time zone. The box is not saved. It sits under the months, a blank row between,
+unlike the Weather and Time tabs where it comes first: the calendar is what the tab is for, the
+city is seldom changed, and it sits over its credit. The months come right under the events line,
+and with a six-week month (August 2026) one row is left to spare in the 23-row pop-up.
 
-Today in full ("Thursday, September 24, 2026") always sits centered over the months
-(`#calendar-today`), and follows a new day. It takes the place of a Today button: a click on it
-puts today's month in focus and picks today (`go_today`), and it underlines on hover like a link. It takes the blank row the tabs keep under them on
-every other tab: a view with `UNDER_TABS` has `#modes` get the `-under-tabs` class, which drops
-the tabs' `margin-bottom`, so the date adds no row.
+First, under the tabs' blank row, the day picked in full ("Thursday, September 24, 2026", blue) centered over the
+months (`#calendar-date`); it follows a new day while today is picked. It is no link: there is no
+Today button, and today's cell picks today. Under it, on its own line, the day's sunrise and
+sunset at the city (`DaySun`, "󰖜 7:05am   󰖛 6:58pm", the icons yellow), then, on a line of its
+own over the months, everything found for the day, separated by " • " (`DayEvents`,
+`#calendar-events`, empty on most days): "󰽢 Full moon" on the day the moon is full there,
+"󰅐 DST starts" or "󰅐 DST ends" in the city's time zone (`clocks.clock_change`), and its public
+holidays, "󰧓 Veterans Day". The holidays come from the `holidays` package (`public_holidays.on`),
+in the place's own language ("Fête nationale" in France; French in Quebec, though the package's
+Canada is English, `REGION_LANGUAGES`), for the city's country (`Place.country_code`), with its state's or province's in the
+US and Canada (`REGION_CODES` names them; Oregon has no Columbus Day, for one); other countries'
+regions are left out (Alsace's own days need its department, which `Place` does not keep). The
+line is as wide as the months (58), so a day with many events could be cut. `sky.py` works the sun
+and moon out with no request, for any date: the sunrise equation (a minute or two off) and
+Meeus's full moon (a few minutes off).
+
+Today is picked at first; a click on a day picks it (`MonthView.day_at` finds the day from the
+click's place, since a month is one piece of text), and a picked day other than today gets a
+light blue cell (`month--picked`). There is no key for it. A day to come with an event (a full moon,
+DST, a holiday) has its number in yellow (`month--marked`, from `CalendarView.notable`, which `MonthView`
+calls as `marked`), on the picked cell too; a past one stays grey, since grey always means past. A new day moves the pick to the new
+today if it was on the old one. A new city redraws the months, its events on other days.
+
+`birthdays` in `config.yaml` maps dates to names, every year: "MM-DD" (`10-02: Mom`), or with the
+year born, "YYYY-MM-DD", which adds the age that year ("Mom (60)", "Léa (born)" the year born, and
+nothing before it); a bad date is a warning in the footer and left out
+(`config.Birthday`). A birthday shows the cake in place of its number, past or not; to come, it is
+yellow like other events (`month--birthday`), and its name comes first in the events line, after a Nerd Font cake in yellow
+("󰃫 Mom (60) • 󰽢 Full moon"). `CalendarView.notable` says which color a day takes: "birthday",
+"marked" or none.
 
 `week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is
 kept as calendar's number (Monday 0). An unknown day is a warning in the footer and Monday.
@@ -284,8 +311,8 @@ in full or by initials ("BC", "Hong Kong" for HK), or a US state or Canadian pro
 postal code (`REGION_CODES`: "OR", "ME", "QC"). A single word never matches by its first letter,
 or "ME" would find Multnomah County. A place's own label ("Portland, Maine, United States"), as
 the box shows it, finds that place again, so Enter on an untouched box is harmless. The result is cached in
-`~/.cache/outils/places.json` (`outils.CACHE_DIR`), keyed by the location text, with its IANA time zone for the Time tab (an entry from before that
-field is asked again), so opening
+`~/.cache/outils/places.json` (`outils.CACHE_DIR`), keyed by the location text, with its IANA time zone for the Time tab and its country code for the calendar's holidays (an
+entry from before either field is asked again), so opening
 the pop-up costs one request. `units` is `metric` (the default) or `imperial`. The forecast is
 always asked in metric and converted when drawn (`weather.temperature`, `weather.speed`), so °C
 and °F, right of the City box (`#weather-units`, buttons that cannot take focus, the one in use in

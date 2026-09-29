@@ -12,15 +12,17 @@ from textual.widgets import TabbedContent
 from outils.app import MODES, FooterMessage, OutilsApp
 from outils.config import Config
 from outils.ipinfo import IpInfoError
-from outils.history import HistoryError
 from outils.nmcli import Scan
 from outils.pactl import SINK, Device, Mixer
-from outils.weather import WeatherError
+from outils.weather import Place, WeatherError
 from outils.widgets import CalendarView, LifeView, SnakeView, WeatherView
 from outils.widgets.snake_view import PAUSED, PLAYING
 
 
 SPEAKERS = Device(SINK, 1, "laptop", "Laptop speakers", 80, False, default=True)
+
+
+PORTLAND = Place("Portland", "Oregon", "United States", 45.52, -122.68, "America/Los_Angeles", "US")
 
 
 def help_keys(app) -> dict[str, list[str]]:
@@ -47,7 +49,8 @@ class AppTest(unittest.TestCase):
                 # The modes that ask a service get no answer: the tests never reach the network
                 patch("outils.widgets.weather_view.forecast", side_effect=WeatherError("offline")) as self.forecast,
                 patch("outils.widgets.ip_view.fetch", side_effect=IpInfoError("offline")) as self.fetch,
-                patch("outils.widgets.calendar_view.events", side_effect=HistoryError("offline")),
+                # The calendar's city is found, so no error takes the footer
+                patch("outils.widgets.calendar_view.find_place", return_value=PORTLAND),
                 # Nor the Dropbox client on this computer
                 patch("outils.widgets.dropbox_view.status", return_value="Up to date") as self.status,
                 patch("outils.widgets.dropbox_view.recent", return_value=[]),
@@ -187,33 +190,31 @@ class AppTest(unittest.TestCase):
 
         self.run_app(body, "time")
 
-    def test_the_calendar_shows_today_in_full_over_its_buttons_in_the_row_other_tabs_keep_blank(self):
+    def test_the_calendar_shows_the_day_picked_then_the_months_then_its_city(self):
         async def body(app, pilot):
-            label = app.query_one("#calendar-today")
+            label = app.query_one("#calendar-date")
             today = app.query_one(CalendarView).today
             self.assertEqual(label.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
-            # Right under the tabs, right over the buttons
-            self.assertEqual(label.region.y, app.mode_tabs.region.bottom)
-            self.assertEqual(app.query_one("#calendar-nav").region.y, label.region.y + 1)
+            # After the blank row under the tabs, the date, its sun and its events, the months, then a
+            # blank row and the City box
+            self.assertEqual(label.region.y, app.mode_tabs.region.bottom + 1)
+            months = app.query_one("#calendar-months").region
+            self.assertEqual(months.y, label.region.y + 3)
+            self.assertEqual(app.query_one("#calendar-city").region.y, months.bottom + 1)
             self.assertEqual(screen_row(app, label.region.y).strip(), f"{today:%A, %B} {today.day}, {today.year}")
             # Centered over the months
             text = screen_row(app, label.region.y)
-            nav = app.query_one("#calendar-nav").region
+            nav = app.query_one("#calendar-months").region
             middle = (len(text) - len(text.lstrip()) + len(text.rstrip())) / 2
             self.assertLessEqual(abs(middle - (nav.x + nav.right) / 2), 1)
-            # Wikipedia's events credited over the rule, like the other tabs' data
+            # The city is Open-Meteo's
             credit = app.query_one("#mode-credit")
             self.assertTrue(credit.display)
-            self.assertEqual(screen_row(app, credit.region.y).strip(), "Data by wikimedia.org")
-            self.assertEqual(app.query_one("#mode-credit-link").url, "https://wikimedia.org")
+            self.assertEqual(screen_row(app, credit.region.y).strip(), "Data by open-meteo.com")
             # A new day shows
             app.query_one(CalendarView).set_today(date(2027, 1, 1))
             await pilot.pause()
             self.assertEqual(str(label.render()), "Friday, January 1, 2027")
-            # The other tabs keep a blank row under the tabs
-            await pilot.press("tab")
-            await pilot.pause()
-            self.assertEqual(app.query_one("#time").region.y, app.mode_tabs.region.bottom + 1)
 
         self.run_app(body)
 

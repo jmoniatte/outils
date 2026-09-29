@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from functools import cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
@@ -85,3 +85,14 @@ def read(clock: Clock, now: datetime) -> Reading:
     hours, minutes = divmod(abs(minutes), 60)
     return Reading(clock.name, f"{local:%H:%M}", f"{sign}{hours:02}:{minutes:02}", bool(local.dst()), clock.zone.key)
 
+
+
+def clock_change(day: date, zone: tzinfo | None = None) -> timedelta:
+    """How far clocks move on day in zone, the system's by default: forward positive, back
+    negative, zero on most days."""
+
+    def offset(on: date) -> timedelta:
+        midnight = datetime.combine(on, time())
+        return (midnight.replace(tzinfo=zone) if zone else midnight.astimezone()).utcoffset()
+
+    return offset(day + timedelta(days=1)) - offset(day)

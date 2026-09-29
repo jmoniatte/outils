@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from datetime import date
 
+from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.message import Message
@@ -13,6 +15,8 @@ CELL = 4
 MONTH_WIDTH = 7 * CELL
 # The name, a blank row, the day names, the dashed rule under them, then the weeks
 MONTH_HEIGHT = 4 + WEEKS_SHOWN
+# Nerd Font's cake, a birthday's, as the calendar's events line has it
+CAKE = "\U000f00eb"
 # Saturday and Sunday, as calendar counts days
 WEEKEND = (5, 6)
 
@@ -34,6 +38,8 @@ class MonthView(Widget):
         "month--past",
         "month--today",
         "month--picked",
+        "month--marked",
+        "month--birthday",
     }
 
     class DayClicked(Message):
@@ -48,8 +54,20 @@ class MonthView(Widget):
     }}
     """
 
-    def __init__(self, year: int, month: int, first_weekday: int, today: date, picked: date | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        year: int,
+        month: int,
+        first_weekday: int,
+        today: date,
+        picked: date | None = None,
+        marked: Callable[[date], str | None] | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
+        # Which color a day has from today on: "birthday" for a birthday from the config,
+        # "marked" (yellow) for another event (a full moon, DST, a holiday), None for none
+        self.marked = marked or (lambda day: None)
         self.year = year
         self.month = month
         self.first_weekday = first_weekday
@@ -81,7 +99,8 @@ class MonthView(Widget):
         return self.get_component_rich_style(f"month--{name}")
 
     def render(self) -> Text:
-        """Past days and past months in grey, today as a block, what is to come in plain text."""
+        """Past days and past months in grey, today as a block, what is to come in plain text, a
+        day with an event yellow, a birthday's cake in place of its number."""
         this_month = (self.today.year, self.today.month)
         shown = (self.year, self.month)
         title_style = "title-current" if shown == this_month else "title-past" if shown < this_month else "title"
@@ -102,13 +121,18 @@ class MonthView(Widget):
                     text.append(" " * CELL)
                     continue
                 shown_day = date(self.year, self.month, day)
+                kind = self.marked(shown_day)
+                # A birthday shows its cake in place of its number, past or not
+                label = f"{CAKE:>2}" if kind == "birthday" else f"{day:2}"
                 if shown_day == self.today:
                     style = self._style("today")
-                elif shown_day == self.picked:
-                    style = self._style("picked")
                 elif shown_day < self.today:
-                    style = self._style("past")
+                    # Grey always means past, marked or not
+                    style = self._style("picked" if shown_day == self.picked else "past")
                 else:
-                    style = ""
-                text.append(f" {day:2} ", style=style)
+                    style = self._style("picked") if shown_day == self.picked else Style()
+                    if kind:
+                        # Its color only: the component style carries the widget's background too, which would hide the picked cell's
+                        style += Style(color=self._style(kind).color)
+                text.append(f" {label} ", style=style)
         return text

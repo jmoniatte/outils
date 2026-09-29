@@ -2,14 +2,14 @@ import asyncio
 import os
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from tui_kit.theme import load_palette
 
-from outils.clocks import Clock, Reading, local_zone_name, read, suggested_zones, zone_named
+from outils.clocks import Clock, Reading, clock_change, local_zone_name, read, suggested_zones, zone_named
 from outils.config import Config
 from outils.widgets import ClocksView
 from outils.widgets.clocks_view import DST_ICON, NAME_WIDTH, fit_name
@@ -34,6 +34,18 @@ class ReadTest(unittest.TestCase):
         # Half hours, either side of UTC
         self.assertEqual(read(clock("Delhi", "Asia/Kolkata"), SUMMER).offset, "+05:30")
         self.assertEqual(read(clock("St. John's", "America/St_Johns"), WINTER).offset, "-03:30")
+
+
+class ClockChangeTest(unittest.TestCase):
+    def test_clocks_move_on_the_days_summer_time_starts_and_ends_there(self):
+        portland, paris = ZoneInfo("America/Los_Angeles"), ZoneInfo("Europe/Paris")
+        self.assertEqual(clock_change(date(2026, 3, 8), portland), timedelta(hours=1))
+        self.assertEqual(clock_change(date(2026, 11, 1), portland), timedelta(hours=-1))
+        self.assertEqual(clock_change(date(2026, 10, 25), paris), timedelta(hours=-1))
+        self.assertEqual(clock_change(date(2026, 11, 1), paris), timedelta())
+        # Lord Howe Island moves half an hour; UTC never moves
+        self.assertEqual(clock_change(date(2026, 4, 5), ZoneInfo("Australia/Lord_Howe")), timedelta(minutes=-30))
+        self.assertEqual(clock_change(date(2026, 3, 8), UTC), timedelta())
 
 
 class ZoneTest(unittest.TestCase):

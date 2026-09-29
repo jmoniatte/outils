@@ -1,4 +1,4 @@
-"""JSON from the web services the tabs ask (Open-Meteo, ipinfo.io, Wikipedia), with urllib; no Textual."""
+"""JSON from the web services the tabs ask (Open-Meteo, ipinfo.io), with urllib; no Textual."""
 
 import json
 from urllib.error import HTTPError, URLError
@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 from . import REPOSITORY_URL, __version__
 
 TIMEOUT = 10
-# Wikipedia refuses urllib's own User-Agent, and asks for one that says who is calling
+# Say who is calling, as web services ask, rather than urllib's own User-Agent
 USER_AGENT = f"outils/{__version__} ({REPOSITORY_URL})"
 
 

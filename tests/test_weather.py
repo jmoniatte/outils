@@ -14,7 +14,7 @@ VICTORIA_BRAZIL = {"name": "Vitória", "latitude": -20.3, "longitude": -40.3, "c
 VICTORIA_BC = {"name": "Victoria", "latitude": 48.4, "longitude": -123.4, "country_code": "CA", "country": "Canada", "admin1": "British Columbia", "timezone": "America/Vancouver"}
 VICTORIA_HK = {"name": "Victoria", "latitude": 22.3, "longitude": 114.1, "country_code": "HK", "admin1": "Central and Western"}
 RESULTS = [VICTORIA_BRAZIL, VICTORIA_BC, VICTORIA_HK]
-PLACE = Place("Victoria", "British Columbia", "Canada", 48.4, -123.4, "America/Vancouver")
+PLACE = Place("Victoria", "British Columbia", "Canada", 48.4, -123.4, "America/Vancouver", "CA")
 FORECAST = {
     "current": {
         "temperature_2m": 11.6, "apparent_temperature": 9.2,
@@ -77,12 +77,12 @@ class FindPlaceTest(unittest.TestCase):
     def test_a_bad_cache_entry_is_asked_again_and_a_bad_answer_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.ask", return_value={"results": RESULTS}) as get:
             cache = Path(tmp) / "places.json"
-            # The last is an entry from before places had a time zone
+            # The last are entries from before places had a time zone, then a country code
             before = {"name": "Victoria", "region": "British Columbia", "country": "Canada", "latitude": 48.4, "longitude": -123.4}
-            for entry in ({"name": "Victoria"}, ["Victoria"], "Victoria", before):
+            for entry in ({"name": "Victoria"}, ["Victoria"], "Victoria", before, {**before, "timezone": "America/Vancouver"}):
                 cache.write_text(json.dumps({"Victoria, BC": entry}))
                 self.assertEqual(find_place("Victoria, BC", cache), PLACE)
-            self.assertEqual(get.call_count, 4)
+            self.assertEqual(get.call_count, 5)
         for answer in ([], {"results": [{"name": "Victoria"}]}, {"results": ["Victoria"]}):
             with tempfile.TemporaryDirectory() as tmp, patch("outils.weather.ask", return_value=answer):
                 with self.assertRaisesRegex(WeatherError, "answer outils cannot read"):

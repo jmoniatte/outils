@@ -1,6 +1,8 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 from tui_kit.config import read_theme, save_setting
@@ -11,6 +13,27 @@ from .months import WEEKDAY_NAMES
 from .weather import METRIC, UNITS
 
 CONFIG_FILE = Path.home() / ".config" / "outils" / "config.yaml"
+
+
+class Birthday(NamedTuple):
+    """Someone's birthday from the config, every year: "10-02", or with the year born, "1990-10-02",
+    which gives the age."""
+
+    name: str
+    month: int
+    day: int
+    # None when not given; no birthday before it
+    year: int | None = None
+
+    def falls_on(self, day: date) -> bool:
+        return (day.month, day.day) == (self.month, self.day) and day.year >= (self.year or day.year)
+
+    def label(self, day: date) -> str:
+        """ "Mom (60)" on day, the age that day when the year born is known; "Léa (born)" that year."""
+        if self.year is None:
+            return self.name
+        age = day.year - self.year
+        return f"{self.name} ({age or 'born'})"
 
 
 @dataclass
@@ -29,6 +52,8 @@ class Config:
     units: str = METRIC
     # The Time tab's clocks, top to bottom
     clocks: list[Clock] = field(default_factory=lambda: _clocks(DEFAULT_CLOCKS))
+    # Birthdays, which the calendar shows with a cake
+    birthdays: list[Birthday] = field(default_factory=list)
     # What in the config file was left out, and why; the footer shows these
     warnings: list[str] = field(default_factory=list)
 
@@ -59,6 +84,7 @@ def load_config(path: Path = CONFIG_FILE) -> Config:
     _read_week_start(data.get("week_start"), config)
     _read_weather(data, config)
     _read_clocks(data.get("clocks"), config)
+    _read_birthdays(data.get("birthdays"), config)
     return config
 
 
@@ -126,3 +152,24 @@ def _read_week_start(value: object, config: Config) -> None:
     else:
         config.warnings.append(f"week_start: '{value}' is not a day of the week, using monday")
 
+
+def _read_birthdays(value: object, config: Config) -> None:
+    """birthdays: a mapping of dates to names, "MM-DD" or "YYYY-MM-DD" with the year born."""
+    if value is None:
+        return
+    if not isinstance(value, Mapping):
+        config.warnings.append("birthdays: must map dates to names, such as 10-02: Mom")
+        return
+    for when, name in value.items():
+        # YAML reads an unquoted 2026-10-15 as a date already
+        text = when.isoformat() if isinstance(when, date) else str(when).strip()
+        parts = text.split("-")
+        try:
+            numbers = [int(part) for part in parts]
+            year, month, day = numbers if len(numbers) == 3 else (None, *numbers)
+            # Checked against a leap year, so 02-29 is a day
+            date(year or 2024, month, day)
+        except (TypeError, ValueError):
+            config.warnings.append(f"birthdays: '{when}' is not a date, such as 10-02 or 1990-10-02")
+            continue
+        config.birthdays.append(Birthday(str(name).strip(), month, day, year))

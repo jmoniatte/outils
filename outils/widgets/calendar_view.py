@@ -1,40 +1,121 @@
 import asyncio
-import random
-from datetime import date
+from calendar import monthrange
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from rich.text import Text
 from textual import on, work
-from textual.events import Click
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.css.query import NoMatches
 from textual.containers import Center, Horizontal, Vertical
-from textual.widgets import Button, Static
+from textual.widget import Widget
+from textual.suggester import SuggestFromList
+from textual.widgets import Button, Input, Static
 from tui_kit.shortcuts import ACTIONS
 
+from .. import public_holidays
 from ..click_only import quick_button
+from ..clocks import clock_change
 from ..config import Config
-from ..history import Event, HistoryError, events
 from ..months import shift_month
-from .month_view import MonthView
+from ..sky import FULL_MOON, Sun, full_moon, sun
+from ..weather import Place, WeatherError, find_place
+from .lookup_box import GAP, LookupBox, completed, lookup_row
+from .month_view import CAKE, MonthView
 
-# The most an event takes under the months, so the pop-up never needs more rows
-HISTORY_LINES = 3
+# Nerd Font's sunrise and sunset, as the Weather tab's icons are, and a clock
+SUNRISE, SUNSET, CLOCK, HOLIDAY = "\U000f059c", "\U000f059b", "\U000f0150", "\U000f09d3"
+
+
+class DayEvents(Widget):
+    """On its own line over the months, everything found for the day picked, separated by " • ", the
+    config's birthdays first: "󰃫 Mom (60) • 󰽢 Full moon • 󰅐 DST ends • 󰧓 Veterans Day"; empty on most days."""
+
+    COMPONENT_CLASSES = {"day--icon", "day--birthday"}
+
+    DEFAULT_CSS = """
+    DayEvents {
+        width: auto;
+        height: 1;
+    }
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.birthdays: list[str] = []
+        self.full = False
+        self.change = timedelta()
+        self.holidays: list[str] = []
+
+    def show(self, birthdays: list[str], full: bool, change: timedelta, holidays: list[str]) -> None:
+        self.birthdays, self.full, self.change, self.holidays = birthdays, full, change, holidays
+        # Its width follows the text's, to stay centered
+        self.refresh(layout=True)
+
+    def render(self) -> Text:
+        icon = self.get_component_rich_style("day--icon")
+        # Birthdays first
+        events = [Text(CAKE, style=self.get_component_rich_style("day--birthday")) + Text(f" {name}") for name in self.birthdays]
+        if self.full:
+            events.append(Text(FULL_MOON, style=icon) + Text(" Full moon"))
+        if self.change:
+            events.append(Text(CLOCK, style=icon) + Text(f" DST {'starts' if self.change > timedelta() else 'ends'}"))
+        for holiday in self.holidays:
+            events.append(Text(HOLIDAY, style=icon) + Text(f" {holiday}"))
+        return Text(" • ").join(events)
+
+
+class DaySun(Widget):
+    """When the sun rises and sets on the day picked, on its own line under it:
+    "󰖜 7:05am   󰖛 6:57pm"; nothing until the place is found, or on a day it never rises."""
+
+    COMPONENT_CLASSES = {"day--icon"}
+
+    DEFAULT_CSS = """
+    DaySun {
+        width: auto;
+        height: 1;
+    }
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.sun: Sun | None = None
+
+    def show(self, sun: Sun | None) -> None:
+        self.sun = sun
+        self.refresh(layout=True)
+
+    def render(self) -> Text:
+        line = Text()
+        if self.sun and self.sun.rise:
+            icon = self.get_component_rich_style("day--icon")
+            line.append(SUNRISE, style=icon)
+            line.append(f" {_clock(self.sun.rise)}   ")
+            line.append(SUNSET, style=icon)
+            line.append(f" {_clock(self.sun.set)}")
+        return line
+
+
+def _clock(time: datetime) -> str:
+    """"7:05am", to the nearest minute."""
+    hour, minute = divmod(time.hour * 60 + time.minute + round(time.second / 60), 60)
+    return f"{hour % 12 or 12}:{minute:02}{'am' if hour % 24 < 12 else 'pm'}"
 
 
 class CalendarView(Vertical, can_focus=True):
-    """Several months side by side, the one in focus first, under today's date and Previous and
-    Next, then something that happened on the day picked, in a past year, from Wikipedia.
+    """Several months side by side, the one in focus first, over a City box, under the day picked in
+    full, its sunrise and sunset, and what is found for it (a full moon, a clock change, holidays),
+    with an arrow each side of the months' names to step back or forward. The sun, the clock changes and the holidays are the city's.
 
     before and after say how many months flank the one in focus. It starts on today's month, and
     follows today into the next month when it was on show. A click on a day picks it; today is
-    picked at first, and a click on the date goes back to it.
+    picked at first.
     """
 
-    # Its date takes the blank row under the tabs, so it adds no row
-    UNDER_TABS = True
-    # Shown at the bottom right, over the footer's rule: the words, then the link
-    CREDIT = ("Data by", "https://wikimedia.org")
+    # Shown at the bottom right, over the footer's rule: the words, then the link; the city is
+    # Open-Meteo's
+    CREDIT = ("Data by", "https://open-meteo.com")
 
     BINDINGS = [
         Binding("left", "shift(-1)", "Previous month", key_display="←", group=ACTIONS),
@@ -51,26 +132,36 @@ class CalendarView(Vertical, can_focus=True):
         self.month = self.today.month
         self.picked = self.today
         self.asked = False
-        # Wikipedia's events by (month, day): a day clicked again costs no request
-        self.history: dict[tuple[int, int], list[Event]] = {}
-        self.event: Event | None = None
+        self.locations = config.locations
+        self.birthdays = config.birthdays
+        # The city in the box, found the first time the tab shows: the first of the config's
+        # locations until another is typed
+        self.place: Place | None = None
 
     def compose(self) -> ComposeResult:
-        # As wide as the months, so the buttons sit over their outer edges and their middle
+        # As wide as the months and their arrows, so the date, the sun and the events center over them
         with Vertical(id="calendar-body"):
             with Center():
-                yield Static(self.today_text, id="calendar-today")
-            with Horizontal(id="calendar-nav"):
-                yield quick_button("← Previous", "btn-previous", "tinted -green step-button")
-                yield Static("", classes="spacer")
-                yield quick_button("Next →", "btn-next", "tinted -green step-button")
+                yield Static(self.date_text, id="calendar-date")
+            with Center():
+                yield DaySun(id="calendar-sun")
+            with Center():
+                yield DayEvents(id="calendar-events")
+            # The arrows on the months' name row, one each side
             with Horizontal(id="calendar-months"):
+                yield quick_button("←", "btn-previous", "tinted -green step-button")
                 for year, month in self.months():
-                    yield MonthView(year, month, self.first_weekday, self.today, self.picked)
-        # Out of the months' box, so it takes the tab's whole width
-        with Horizontal(id="calendar-history"):
-            yield Static("", id="history-year")
-            yield Static("", id="history-text")
+                    yield MonthView(year, month, self.first_weekday, self.today, self.picked, self.notable)
+                yield quick_button("→", "btn-next", "tinted -green step-button")
+        # Under the months: the calendar comes first, the city is seldom changed
+        box = LookupBox(
+            self.locations[0],
+            placeholder="City, or City, Region or Country",
+            suggester=SuggestFromList(self.locations, case_sensitive=False),
+            id="calendar-city",
+        )
+        # No label, the placeholder and the place say what it is; the box stays where the label would push it
+        yield lookup_row("", box, label_width=len("City") + GAP)
 
     def on_mount(self) -> None:
         # outils stays open for days, so a new day must reach the calendar without a restart
@@ -78,10 +169,10 @@ class CalendarView(Vertical, can_focus=True):
 
     def tab_shown(self) -> None:
         self.check_today()
-        # Asked the first time its tab shows, so opening another tab costs no request
+        # Found the first time its tab shows, so opening another tab costs no lookup
         if not self.asked:
             self.asked = True
-            self.show_history()
+            self.load(self.locations[0])
 
     def check_today(self) -> None:
         self.set_today(date.today())
@@ -93,16 +184,61 @@ class CalendarView(Vertical, can_focus=True):
         followed = (self.year, self.month) == (self.today.year, self.today.month)
         if self.picked == self.today:
             self.picked = today
-            if self.asked:
-                self.show_history()
+            self.show_day()
         self.today = today
         self.show_month(*((today.year, today.month) if followed else (self.year, self.month)))
-        self.query_one("#calendar-today", Static).update(self.today_text)
+
+    @on(Input.Submitted, "#calendar-city")
+    def _city_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        typed = event.value.strip()
+        city = completed(typed, self.locations)
+        if city != typed:
+            event.input.value = city
+        if city:
+            self.load(city)
+
+    @work(exclusive=True, group="place")
+    async def load(self, location: str) -> None:
+        """Find location, cached once found here or on the Weather tab, so seldom a request; the
+        city on show stays until it is found. Until a first is found, there is no sun, no holiday,
+        and the full moon and DST are by the system's clock."""
+        try:
+            self.place = await asyncio.to_thread(find_place, location)
+        except WeatherError as error:
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self.query_one(LookupBox).show_found(self.place.label)
+        self.show_day()
+        # The yellow days follow the city: its holidays, its DST, the full moon in its time zone
+        self.show_month(self.year, self.month)
 
     @property
-    def today_text(self) -> str:
-        """Today in full, shown over the buttons."""
-        return f"{self.today:%A, %B} {self.today.day}, {self.today.year}"
+    def zone(self) -> ZoneInfo | None:
+        """The place's time zone, None for the system's until it is found."""
+        return ZoneInfo(self.place.timezone) if self.place else None
+
+    def notable(self, day: date) -> str | None:
+        """How the calendar marks day: "birthday" for a birthday from the config, "marked" for a full
+        moon, a clock change or a public holiday, None for none."""
+        if any(birthday.falls_on(day) for birthday in self.birthdays):
+            return "birthday"
+        zone = self.zone
+        if full_moon(day, zone) or clock_change(day, zone) or public_holidays.on(day, self.place):
+            return "marked"
+        return None
+
+    def show_day(self) -> None:
+        """The day picked, its sun and its events over the buttons, in the place's time."""
+        place, zone = self.place, self.zone
+        self.query_one("#calendar-date", Static).update(self.date_text)
+        birthdays = [birthday.label(self.picked) for birthday in self.birthdays if birthday.falls_on(self.picked)]
+        self.query_one(DayEvents).show(birthdays, full_moon(self.picked, zone), clock_change(self.picked, zone), public_holidays.on(self.picked, self.place))
+        self.query_one(DaySun).show(sun(self.picked, place.latitude, place.longitude, zone) if place else None)
+
+    @property
+    def date_text(self) -> str:
+        return f"{self.picked:%A, %B} {self.picked.day}, {self.picked.year}"
 
     def months(self) -> list[tuple[int, int]]:
         """The (year, month) shown, left to right."""
@@ -115,8 +251,15 @@ class CalendarView(Vertical, can_focus=True):
             view.show(shown_year, shown_month, self.today, self.picked)
 
     def action_shift(self, delta: int) -> None:
-        """Move every month by delta: -1 is the previous month, 1 the next."""
+        """Move every month by delta: -1 is the previous month, 1 the next. A day picked that leaves
+        the view moves along, to the same day of the nearest month shown (the 28th for a 31st in
+        February)."""
         self.show_month(*shift_month(self.year, self.month, delta))
+        shown = self.months()
+        picked = (self.picked.year, self.picked.month)
+        if picked not in shown:
+            year, month = shown[0] if picked < shown[0] else shown[-1]
+            self.pick(self.picked.replace(year=year, month=month, day=min(self.picked.day, monthrange(year, month)[1])))
 
     @on(MonthView.DayClicked)
     def _day_clicked(self, event: MonthView.DayClicked) -> None:
@@ -124,66 +267,10 @@ class CalendarView(Vertical, can_focus=True):
         self.pick(event.day)
 
     def pick(self, day: date) -> None:
-        """Highlight day and show something that happened on it."""
+        """Highlight day and show it in full."""
         self.picked = day
         self.show_month(self.year, self.month)
-        self.show_history()
-
-    @work(exclusive=True)
-    async def show_history(self) -> None:
-        """Something that happened on the day picked, another one each time it is picked again.
-
-        The answer is waited for in a thread, so the calendar works meanwhile.
-        """
-        key = (self.picked.month, self.picked.day)
-        if key not in self.history:
-            self.event = None
-            self._show_history("", f"Asking Wikipedia about {self.picked:%B} {self.picked.day}...", "-waiting")
-            try:
-                self.history[key] = await asyncio.to_thread(events, *key)
-            except HistoryError as error:
-                self._show_history("", str(error), "-error")
-                return
-        choices = [event for event in self.history[key] if event != self.event] or self.history[key]
-        self.event = random.choice([event for event in choices if self._lines(event.text, self._text_width(event)) <= HISTORY_LINES] or choices)
-        self._show_event()
-
-    def on_resize(self) -> None:
-        # A new width wraps the event anew; it may no longer need cutting, or need it now
-        if self.event:
-            self._show_event()
-
-    def _show_event(self) -> None:
-        self._show_history(str(self.event.year), self._fit(self.event.text, self._text_width(self.event)))
-
-    def _text_width(self, event: Event) -> int:
-        """The room left for the event's text beside its year."""
-        # Before its first layout, or while its tab hides, the view has no width: the window's is near enough
-        return (self.content_size.width or self.app.size.width) - len(str(event.year)) - 1
-
-    def _lines(self, text: str, width: int) -> int:
-        return len(Text(text).wrap(self.app.console, max(width, 1)))
-
-    def _fit(self, text: str, width: int) -> str:
-        """text, cut at a word with "…" when it would take more than HISTORY_LINES lines."""
-        words = text.split()
-        while len(words) > 1 and self._lines(text, width) > HISTORY_LINES:
-            words.pop()
-            text = " ".join(words) + "…"
-        return text
-
-    def _show_history(self, year: str, text: str, state: str = "") -> None:
-        try:
-            year_label = self.query_one("#history-year", Static)
-        except NoMatches:
-            # Wikipedia answered as the app closed, its widgets already gone
-            return
-        year_label.update(year)
-        year_label.display = bool(year)
-        label = self.query_one("#history-text", Static)
-        label.update(text)
-        label.set_class(state == "-waiting", "-waiting")
-        label.set_class(state == "-error", "-error")
+        self.show_day()
 
     @on(Button.Pressed, "#btn-previous")
     def _previous(self, event: Button.Pressed) -> None:
@@ -194,14 +281,3 @@ class CalendarView(Vertical, can_focus=True):
     def _next(self, event: Button.Pressed) -> None:
         event.stop()
         self.action_shift(1)
-
-    def on_click(self, event: Click) -> None:
-        if event.widget is self.query_one("#calendar-today"):
-            self.go_today()
-
-    def go_today(self) -> None:
-        """Today's month in focus, and today picked."""
-        self.show_month(self.today.year, self.today.month)
-        # Back on today, its event too; one already on show stays
-        if self.picked != self.today:
-            self.pick(self.today)
