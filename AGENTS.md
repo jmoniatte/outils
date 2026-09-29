@@ -171,7 +171,7 @@ a click. The date, sun and events center over the months and
 their arrows (`#calendar-body`, auto width). Each `MonthView` is laid out like
 `cal`, with room to read it: every day sits in a four-column cell (its two digits and a space on
 each side), so a month is 28 columns wide and two need 58. Top
-to bottom: the name centered, a blank row, the day names, a dashed rule under them, then always
+to bottom: the name centered, the day names, a dashed rule under them, then always
 `months.WEEKS_SHOWN` (6) week rows, so months side by side line up and a shift never changes
 the height. Months sit two columns apart, four with the cells' own space. Time reads from the
 colors: days before today are grey (`month--past`), today fills its whole cell in blue
@@ -192,14 +192,17 @@ the footer, and the one on show stays. The first is found the first time the tab
 by the system's time zone. The box is not saved. It sits under the months, a blank row between,
 unlike the Weather and Time tabs where it comes first: the calendar is what the tab is for, the
 city is seldom changed, and it sits over its credit. The months come right under the events line,
-and with a six-week month (August 2026) one row is left to spare in the 23-row pop-up.
+and with a six-week month (August 2026) one row is left to spare under the Today button in the
+23-row pop-up.
 
 First, under the tabs' blank row, the day picked in full ("Thursday, September 24, 2026", blue) centered over the
-months (`#calendar-date`); it follows a new day while today is picked. It is no link: there is no
-Today button, and today's cell picks today. Under it, on its own line, the day's sunrise and
+months (`#calendar-date`); it follows a new day while today is picked. It is no link: the green Today button under the
+City box (`go_today`, lined up with the box) puts today's month in focus and picks today, as a
+click on today's cell picks it; it shows only while another day is picked (`visible`, so the
+rows stay put). Under it, on its own line, the day's sunrise and
 sunset at the city (`DaySun`, "󰖜 7:05am   󰖛 6:58pm", the icons yellow), then, on a line of its
-own over the months, everything found for the day, separated by " • " (`DayEvents`,
-`#calendar-events`, empty on most days): "󰽢 Full moon" on the day the moon is full there,
+own over the months, everything found for the day, three spaces apart (`DayEvents`,
+`#calendar-events`, empty on most days): "󰖔 Full moon" on the day the moon is full there,
 "󰅐 DST starts" or "󰅐 DST ends" in the city's time zone (`clocks.clock_change`), and its public
 holidays, "󰧓 Veterans Day". The holidays come from the `holidays` package (`public_holidays.on`),
 in the place's own language ("Fête nationale" in France; French in Quebec, though the package's
@@ -222,7 +225,7 @@ year born, "YYYY-MM-DD", which adds the age that year ("Mom (60)", "Léa (born)"
 nothing before it); a bad date is a warning in the footer and left out
 (`config.Birthday`). A birthday shows the cake in place of its number, past or not; to come, it is
 yellow like other events (`month--birthday`), and its name comes first in the events line, after a Nerd Font cake in yellow
-("󰃫 Mom (60) • 󰽢 Full moon"). `CalendarView.notable` says which color a day takes: "birthday",
+("󰃫 Mom (60)   󰖔 Full moon"). `CalendarView.notable` says which color a day takes: "birthday",
 "marked" or none.
 
 `week_start` in `config.yaml` names the first column, `monday` (the default) to `sunday`, and is

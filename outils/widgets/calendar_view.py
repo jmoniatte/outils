@@ -28,8 +28,8 @@ SUNRISE, SUNSET, CLOCK, HOLIDAY = "\U000f059c", "\U000f059b", "\U000f0150", "\U0
 
 
 class DayEvents(Widget):
-    """On its own line over the months, everything found for the day picked, separated by " • ", the
-    config's birthdays first: "󰃫 Mom (60) • 󰽢 Full moon • 󰅐 DST ends • 󰧓 Veterans Day"; empty on most days."""
+    """On its own line over the months, everything found for the day picked, three spaces apart, the
+    config's birthdays first: "󰃫 Mom (60)   󰖔 Full moon   󰅐 DST ends   󰧓 Veterans Day"; empty on most days."""
 
     COMPONENT_CLASSES = {"day--icon", "day--birthday"}
 
@@ -62,7 +62,7 @@ class DayEvents(Widget):
             events.append(Text(CLOCK, style=icon) + Text(f" DST {'starts' if self.change > timedelta() else 'ends'}"))
         for holiday in self.holidays:
             events.append(Text(HOLIDAY, style=icon) + Text(f" {holiday}"))
-        return Text(" • ").join(events)
+        return Text("   ").join(events)
 
 
 class DaySun(Widget):
@@ -162,8 +162,10 @@ class CalendarView(Vertical, can_focus=True):
         )
         # No label, the placeholder and the place say what it is; the box stays where the label would push it
         yield lookup_row("", box, label_width=len("City") + GAP)
+        yield quick_button("Today", "btn-today", "tinted -green")
 
     def on_mount(self) -> None:
+        self._show_today_button()
         # outils stays open for days, so a new day must reach the calendar without a restart
         self.set_interval(60, self.check_today)
 
@@ -187,6 +189,8 @@ class CalendarView(Vertical, can_focus=True):
             self.show_day()
         self.today = today
         self.show_month(*((today.year, today.month) if followed else (self.year, self.month)))
+        # A day picked by hand can become today
+        self._show_today_button()
 
     @on(Input.Submitted, "#calendar-city")
     def _city_submitted(self, event: Input.Submitted) -> None:
@@ -235,6 +239,11 @@ class CalendarView(Vertical, can_focus=True):
         birthdays = [birthday.label(self.picked) for birthday in self.birthdays if birthday.falls_on(self.picked)]
         self.query_one(DayEvents).show(birthdays, full_moon(self.picked, zone), clock_change(self.picked, zone), public_holidays.on(self.picked, self.place))
         self.query_one(DaySun).show(sun(self.picked, place.latitude, place.longitude, zone) if place else None)
+        self._show_today_button()
+
+    def _show_today_button(self) -> None:
+        # Only when it would do something; hidden, not removed, so the rows stay where they are
+        self.query_one("#btn-today").visible = self.picked != self.today
 
     @property
     def date_text(self) -> str:
@@ -276,6 +285,17 @@ class CalendarView(Vertical, can_focus=True):
     def _previous(self, event: Button.Pressed) -> None:
         event.stop()
         self.action_shift(-1)
+
+    @on(Button.Pressed, "#btn-today")
+    def _today(self, event: Button.Pressed) -> None:
+        event.stop()
+        self.go_today()
+
+    def go_today(self) -> None:
+        """Today's month in focus, and today picked."""
+        self.show_month(self.today.year, self.today.month)
+        if self.picked != self.today:
+            self.pick(self.today)
 
     @on(Button.Pressed, "#btn-next")
     def _next(self, event: Button.Pressed) -> None:

@@ -111,6 +111,11 @@ OutilsHelpScreen #shortcuts-general {
     margin: 1 0 0 0;
 }
 
+/* Under the City box, lined up with it */
+#btn-today {
+    margin-left: 6;
+}
+
 /* As wide as the months, so the date lands over their middle */
 #calendar-body > Center {
     width: 100%;

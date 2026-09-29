@@ -13,8 +13,8 @@ from ..months import WEEKS_SHOWN, month_weeks, weekday_labels
 # highlight has room around the number and the columns read apart
 CELL = 4
 MONTH_WIDTH = 7 * CELL
-# The name, a blank row, the day names, the dashed rule under them, then the weeks
-MONTH_HEIGHT = 4 + WEEKS_SHOWN
+# The name, the day names, the dashed rule under them, then the weeks
+MONTH_HEIGHT = 3 + WEEKS_SHOWN
 # Nerd Font's cake, a birthday's, as the calendar's events line has it
 CAKE = "\U000f00eb"
 # Saturday and Sunday, as calendar counts days
@@ -107,7 +107,7 @@ class MonthView(Widget):
         title = f"{date(self.year, self.month, 1):%B} {self.year}".center(MONTH_WIDTH).rstrip()
         text = Text()
         text.append(title, style=self._style(title_style))
-        text.append("\n\n")
+        text.append("\n")
         # The weekend shows in the day names only, so grey in the numbers always means past
         for column, label in enumerate(weekday_labels(self.first_weekday)):
             is_weekend = (self.first_weekday + column) % 7 in WEEKEND

@@ -51,7 +51,7 @@ class CalendarViewTest(unittest.TestCase):
                 patch("outils.widgets.calendar_view.find_place", side_effect=place if isinstance(place, Exception) else None, return_value=place) as self.find_place,
             ):
                 clock.today.return_value = TODAY
-                async with app.run_test(size=(90, 16)) as pilot:
+                async with app.run_test(size=(90, 20)) as pilot:
                     await pilot.pause()
                     await body(app, pilot)
 
@@ -65,7 +65,6 @@ class CalendarViewTest(unittest.TestCase):
                 lines(months[0]),
                 [
                     "       September 2026",
-                    "",
                     " Mo  Tu  We  Th  Fr  Sa  Su ",
                     " --------------------------",
                     "      1   2   3   4   5   6 ",
@@ -146,7 +145,7 @@ class CalendarViewTest(unittest.TestCase):
             months = list(app.query(MonthView))
             self.assertEqual(len(months), 5)
             self.assertEqual((months[2].year, months[2].month), (2026, 9))
-            self.assertEqual(lines(months[2])[2], " Su  Mo  Tu  We  Th  Fr  Sa ")
+            self.assertEqual(lines(months[2])[1], " Su  Mo  Tu  We  Th  Fr  Sa ")
 
         self.run_view(body, Config(week_start=6), before=2, after=2)
 
@@ -175,6 +174,16 @@ class CalendarViewTest(unittest.TestCase):
             await pilot.press("left", "left")
             await pilot.pause()
             self.assertEqual((view.months(), view.picked), ([(2026, 8), (2026, 9)], date(2026, 9, 30)))
+            # Today, under the City box, goes back to today's month and picks today, then hides
+            today = app.query_one("#btn-today")
+            self.assertTrue(today.visible)
+            await pilot.click("#btn-next")
+            await pilot.click("#btn-next")
+            await pilot.click("#btn-today")
+            await pilot.pause()
+            self.assertEqual((view.months(), view.picked), ([(2026, 9), (2026, 10)], TODAY))
+            self.assertIs(app.focused, view)
+            self.assertFalse(today.visible)
 
         self.run_view(body)
 
@@ -208,21 +217,21 @@ class CalendarViewTest(unittest.TestCase):
             await settle(app, pilot)
             self.assertEqual(view.picked, TODAY)
             months = list(app.query(MonthView))
-            self.assertEqual(months[0].day_at(0, 4), None)
-            self.assertEqual(months[0].day_at(5, 4), date(2026, 9, 1))
-            self.assertEqual(months[1].day_at(9, 9), None)
-            self.assertEqual(months[1].day_at(4, 4), None)
-            # Row 8 is the week of October 26, its second column the 27th
-            await pilot.click(months[1], offset=(5, 8))
+            self.assertEqual(months[0].day_at(0, 3), None)
+            self.assertEqual(months[0].day_at(5, 3), date(2026, 9, 1))
+            self.assertEqual(months[1].day_at(9, 8), None)
+            self.assertEqual(months[1].day_at(4, 3), None)
+            # Row 7 is the week of October 26, its second column the 27th
+            await pilot.click(months[1], offset=(5, 7))
             await settle(app, pilot)
             self.assertEqual(view.picked, date(2026, 10, 27))
             self.assertEqual([spans(m, "picked") for m in months], [[], [" 27 "]])
             # The day names are no day
-            await pilot.click(months[1], offset=(5, 2))
+            await pilot.click(months[1], offset=(5, 1))
             await settle(app, pilot)
             self.assertEqual(view.picked, date(2026, 10, 27))
             # Today, clicked, is picked again
-            await pilot.click(months[0], offset=(13, 7))
+            await pilot.click(months[0], offset=(13, 6))
             await settle(app, pilot)
             self.assertEqual(view.picked, TODAY)
             self.assertEqual([spans(m, "picked") for m in months], [[], []])
@@ -244,10 +253,10 @@ class CalendarViewTest(unittest.TestCase):
             # Then the months, the arrows on their names' row
             self.assertEqual(app.query_one("#btn-previous").region.y, sun_line.region.y + 2)
             # Full on October 26 at 4:12 UTC: the 25th in Portland
-            await pilot.click(list(app.query(MonthView))[1], offset=(25, 7))
+            await pilot.click(list(app.query(MonthView))[1], offset=(25, 6))
             await settle(app, pilot)
             self.assertEqual(str(date_line.render()), "Sunday, October 25, 2026")
-            self.assertEqual(events.render().plain, "\U000f0f62 Full moon")
+            self.assertEqual(events.render().plain, "\U000f0594 Full moon")
             self.assertEqual(sun_line.render().plain, "\U000f059c 7:40am   \U000f059b 6:09pm")
 
             # Clocks go back on November 1 in Portland; everything on a day, comma separated
@@ -255,7 +264,7 @@ class CalendarViewTest(unittest.TestCase):
             await settle(app, pilot)
             self.assertEqual(events.render().plain, "\U000f0150 DST ends")
             events.show(["Mom"], True, timedelta(hours=1), ["Easter Sunday"])
-            self.assertEqual(events.render().plain, "\U000f00eb Mom • \U000f0f62 Full moon • \U000f0150 DST starts • \U000f09d3 Easter Sunday")
+            self.assertEqual(events.render().plain, "\U000f00eb Mom   \U000f0594 Full moon   \U000f0150 DST starts   \U000f09d3 Easter Sunday")
 
             # The days with an event are yellow: the full moons on September 26 and October 25 (Oregon
             # has no Columbus Day on the 12th), not a past one
@@ -265,7 +274,7 @@ class CalendarViewTest(unittest.TestCase):
             await settle(app, pilot)
             self.assertEqual([yellow(m) for m in months], [[], [" 25 "]])
             # Picked, it keeps the picked cell's background, in yellow
-            await pilot.click(months[1], offset=(25, 7))
+            await pilot.click(months[1], offset=(25, 6))
             await settle(app, pilot)
             text = months[1].render()
             style = next(span.style for span in text.spans if text.plain[span.start:span.end] == " 25 ")
@@ -319,7 +328,7 @@ class CalendarViewTest(unittest.TestCase):
             self.assertNotIn(" 12 ", text.plain)
             app.view.pick(date(2026, 10, 25))
             await settle(app, pilot)
-            self.assertEqual(app.query_one("#calendar-events").render().plain, "\U000f00eb Mom (60) • \U000f0f62 Full moon")
+            self.assertEqual(app.query_one("#calendar-events").render().plain, "\U000f00eb Mom (60)   \U000f0594 Full moon")
 
         self.run_view(body, Config(birthdays=birthdays))
 

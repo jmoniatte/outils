@@ -16,8 +16,8 @@ HORIZON = -0.833
 TILT = 23.4397
 
 SYNODIC_MONTH = 29.530588861
-# Nerd Font's full moon
-FULL_MOON = "\U000f0f62"
+# Nerd Font's crescent, as the Weather tab has for a clear night: it reads as the moon, the words say which
+FULL_MOON = "\U000f0594"
 
 
 class Sun(NamedTuple):
