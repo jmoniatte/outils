@@ -118,7 +118,10 @@ class OutilsApp(BaseApp):
             with Horizontal(id="mode-credit"):
                 yield Static("", classes="spacer")
                 yield Static("", id="mode-credit-text")
-                yield click_only(Link("", id="mode-credit-link"))
+                yield click_only(Link("", id="mode-credit-link", classes="credit-link"))
+                # A second site, for a tab whose data comes from two
+                yield Static(" and ", id="mode-credit-and")
+                yield click_only(Link("", id="mode-credit-link-2", classes="credit-link"))
             with Horizontal(id="app-footer-bar"):
                 yield click_only(Button("Close", id="btn-close"))
                 yield click_only(Button("Help", id="btn-help"))
@@ -216,12 +219,14 @@ class OutilsApp(BaseApp):
             view.tab_shown()
 
     def _show_credit(self, view: Widget) -> None:
-        """Over the rule: where the mode's data comes from, with a link, or nothing."""
+        """Over the rule: where the mode's data comes from, with a link to each site (two at most), or nothing."""
         credit = getattr(view, "CREDIT", None)
         self.query_one("#mode-credit").display = credit is not None
         if credit:
-            text, url = credit
+            text, *urls = credit
             self.query_one("#mode-credit-text", Static).update(f"{text} ")
-            link = self.query_one("#mode-credit-link", Link)
-            link.text = url.removeprefix("https://")
-            link.url = url
+            second = len(urls) > 1
+            self.query_one("#mode-credit-and").display = self.query_one("#mode-credit-link-2").display = second
+            for link, url in zip(self.query(".credit-link").results(Link), urls):
+                link.text = url.removeprefix("https://")
+                link.url = url

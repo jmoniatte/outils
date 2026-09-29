@@ -37,16 +37,15 @@ class IpInfoTest(unittest.TestCase):
             [
                 ("IP", "97.115.117.246"),
                 ("Hostname", "97-115-117-246.ptld.qwest.net"),
-                ("City", "Portland"),
-                ("Region", "Oregon"),
-                ("Country", "US"),
-                ("Postal code", "97204"),
+                ("City", "Portland, Oregon, US"),
                 ("Location", "45.5234,-122.6762"),
                 ("Time zone", "America/Los_Angeles"),
                 ("Network", "AS209 CenturyLink Communications, LLC"),
             ],
         )
         self.assertEqual(rows({"ip": "1.2.3.4", "hostname": ""}), [("IP", "1.2.3.4")])
+        # A place without a city is still one row
+        self.assertEqual(rows({"ip": "1.2.3.4", "city": "", "country": "FR"}), [("IP", "1.2.3.4"), ("City", "FR")])
 
     def test_fetch_reads_the_answer_and_turns_failures_into_errors(self):
         with patch("outils.web.urlopen", return_value=io.BytesIO(json.dumps(ANSWER).encode())) as urlopen:
@@ -89,10 +88,13 @@ class IpInfoTest(unittest.TestCase):
 
 
 class IpViewTest(unittest.TestCase):
-    def run_view(self, body, **patches):
+    def run_view(self, body, registration=(), **patches):
         async def main():
             app = Host(IpView(Config()))
-            with patch("outils.widgets.ip_view.fetch", **patches) as fetch:
+            with (
+                patch("outils.widgets.ip_view.fetch", **patches) as fetch,
+                patch("outils.rdap.lookup", return_value=list(registration)) as self.lookup,
+            ):
                 async with app.run_test(size=(90, 24)) as pilot:
                     await settle(app, pilot)
                     await body(app, pilot, fetch)
@@ -109,13 +111,15 @@ class IpViewTest(unittest.TestCase):
             details = app.query_one(IpDetails)
             text = details.render()
             lines = text.plain.split("\n")
-            self.assertEqual(lines[:2], ["IP           97.115.117.246", "Hostname     97-115-117-246.ptld.qwest.net"])
+            self.assertEqual(lines[:2], ["IP            97.115.117.246", "Hostname      97-115-117-246.ptld.qwest.net"])
             address = next(span for span in text.spans if text.plain[span.start:span.end] == "97.115.117.246")
             self.assertEqual(address.style, details.get_component_rich_style("ip--address"))
-            self.assertEqual(lines[-1], "Network      AS209 CenturyLink Communications, LLC")
-            self.assertEqual(len(lines), 9)
+            self.assertEqual(lines[-1], "Network       AS209 CenturyLink Communications, LLC")
+            self.assertEqual(len(lines), 6)
             # The box starts where the values do
-            self.assertEqual(box.region.x, details.region.x + len("Postal code  "))
+            self.assertEqual(box.region.x, details.region.x + len("Name servers  "))
+            # This computer's address has no domain to ask about
+            self.lookup.assert_not_called()
 
         self.run_view(body, return_value=ANSWER)
 
@@ -152,6 +156,31 @@ class IpViewTest(unittest.TestCase):
             self.assertEqual(fetch.call_count, 4)
 
         self.run_view(body, return_value=ANSWER)
+
+    def test_a_host_name_s_domain_shows_under_a_dashed_rule_and_nothing_when_unknown(self):
+        registration = [("Domain", "example.com"), ("Registrar", "IANA"), ("Registered", "1995-08-14, expires 2027-08-13")]
+
+        async def body(app, pilot, fetch):
+            app.query_one(IpView).load("www.example.com")
+            await settle(app, pilot)
+            self.lookup.assert_called_once_with("www.example.com")
+            details = app.query_one(IpDetails)
+            text = details.render()
+            lines = text.plain.split("\n")
+            width = len("Name servers  ") + len("AS209 CenturyLink Communications, LLC")
+            self.assertEqual(lines[6:], ["-" * width, "Domain        example.com", "Registrar     IANA", "Registered    1995-08-14, expires 2027-08-13"])
+            rule = next(span for span in text.spans if text.plain[span.start:span.end] == "-" * width)
+            self.assertEqual(rule.style, details.get_component_rich_style("lookup--rule"))
+            # An address has no domain, and a domain no registry knows adds nothing, rule included
+            self.lookup.return_value = []
+            app.query_one(IpView).load("8.8.8.8")
+            await settle(app, pilot)
+            self.assertEqual(self.lookup.call_count, 1)
+            app.query_one(IpView).load("unknown.example")
+            await settle(app, pilot)
+            self.assertEqual(len(details.render().plain.split("\n")), 6)
+
+        self.run_view(body, registration=registration, return_value=ANSWER)
 
     def test_an_error_shows_in_place_of_the_details_and_not_in_the_footer(self):
         async def body(app, pilot, fetch):

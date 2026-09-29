@@ -84,10 +84,12 @@ def lookup_row(label: str, box: LookupBox, *beside: Widget, label_width: int | N
 class LookupDetails(Widget):
     """What the box found, a row per label and value, the values lined up; or why it found nothing, in red.
 
+    A row whose label is None is a dashed rule, as wide as the rows, between two groups of them.
+
     The colors come from TCSS through the component classes, so a theme change repaints them.
     """
 
-    COMPONENT_CLASSES = {"lookup--label", "lookup--message", "lookup--error"}
+    COMPONENT_CLASSES = {"lookup--label", "lookup--message", "lookup--error", "lookup--rule"}
 
     def __init__(self, labels: Iterable[str], message: str = "", *, id: str) -> None:
         super().__init__(id=id)
@@ -97,7 +99,7 @@ class LookupDetails(Widget):
         self.rows: list[tuple[str, str]] = []
         self.error = ""
 
-    def show(self, rows: list[tuple[str, str]], error: str = "") -> None:
+    def show(self, rows: list[tuple[str | None, str]], error: str = "") -> None:
         self.rows = rows
         self.error = error
         self.refresh(layout=True)
@@ -111,9 +113,13 @@ class LookupDetails(Widget):
         if not self.rows:
             return Text(self.message, style=self.get_component_rich_style("lookup--message"))
         text = Text()
+        width = self.label_width + max(len(value) for label, value in self.rows if label is not None)
         for index, (label, value) in enumerate(self.rows):
             if index:
                 text.append("\n")
+            if label is None:
+                text.append("-" * width, style=self.get_component_rich_style("lookup--rule"))
+                continue
             text.append(f"{label:<{self.label_width}}", style=self.get_component_rich_style("lookup--label"))
             text.append(value, style=self.value_style(index))
         return text

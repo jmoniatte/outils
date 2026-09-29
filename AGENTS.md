@@ -90,9 +90,10 @@ outils/                 # git root + pyproject.toml (run uv commands here)
     snake.py            # The game of snake on a walled grid, and the best score's file; no Textual
     command.py          # Runs a tab's command (pactl, bluetoothctl, nmcli) through tui-kit, failures as the tab's error; no Textual
     click_only.py       # Widgets a click must not give focus to, so the view keeps its keys; quick_button takes every click
-    web.py              # JSON from a web service (Open-Meteo, ipinfo.io) with urllib, outils's User-Agent, failures as the tab's error; no Textual
+    web.py              # JSON from a web service (Open-Meteo, ipinfo.io, rdap.org) with urllib, outils's User-Agent, failures as the tab's error; no Textual
     reload.py           # A view's reload one at a time: a timer tick while one runs is skipped, a request runs it again after; no Textual
     remote.py           # `outils --show <mode>`: tell an outils already running which tab to show, over a Unix socket; no Textual
+    rdap.py             # A domain's registration (whois) from RDAP through rdap.org, for the IP tab; no Textual
     ipinfo.py           # ipinfo.io: an address or host name, the public address by default, and the fields shown; no Textual
     dropbox.py          # The dropbox command (status, start, stop) and the files changed last in its folder; no Textual
     pactl.py            # Every pactl call and the parsing of its JSON output; no Textual
@@ -138,7 +139,7 @@ over the rest of the line (an error wraps onto up to three lines), and Help come
 A view with a `CREDIT`, its words and its site's URL, has it shown in grey at the right, over
 the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlined on hover like
 every link: "Data by open-meteo.com" on the Weather tab
-(its CC BY 4.0 license asks for it) and on the Time and Calendar tabs, whose cities it finds, "Data by ipinfo.io" on the IP tab; the other tabs have none,
+(its CC BY 4.0 license asks for it) and on the Time and Calendar tabs, whose cities it finds, "Data by ipinfo.io and rdap.org" on the IP tab (a `CREDIT` takes a second URL, joined by "and"); the other tabs have none,
 so the line is hidden there.
 Close cannot take focus, so a click leaves the mode's keys working. App tests patch
 `calendar_view.find_place`, `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
@@ -367,7 +368,8 @@ about this computer's public address; Enter in the box asks about what was typed
 box goes back to this computer's. Once found, the box turns blue and shows the address, except a
 host name, which stays as typed (the IP row gives its address), and `IpDetails` shows one row per
 field in `ipinfo.FIELDS` order, the address first and in bold blue, skipping any field ipinfo.io
-leaves out (and its `readme` link).
+leaves out; city, region and country make one City row ("Portland, Oregon, US"), and the postal
+code and the `readme` link are left out.
 
 `ipinfo.fetch(target)` asks `https://ipinfo.io/json` for this computer's address, or
 `https://ipinfo.io/<address>/json` for another (no account, no key), through `web.get_json`. ipinfo.io
@@ -376,6 +378,17 @@ system's search domain is not tried (a wildcard there answers for any name). A p
 reserved address is refused before any request: ipinfo.io only answers `bogon` for it. Failures
 raise `IpInfoError`, shown in red in place of the details and, unlike the Weather tab, not in the footer. ipinfo.io limits unauthenticated requests
 per day, far above what opening a pop-up uses.
+
+A host name typed also gets its domain's registration, under a dashed rule (a `LookupDetails`
+row whose label is None, `lookup--rule`, as wide as the rows): `rdap.lookup` asks RDAP, whois's
+successor in JSON, through `https://rdap.org/domain/<name>` (no account, no key), while ipinfo.io
+is asked. A registry knows the domain, not the hosts under it, so the name is tried as typed, then
+without its first label ("www.bbc.co.uk", then "bbc.co.uk"), up to `TRIES` (4); the first known
+wins, not the shortest, since "co.uk" answers too. `web.get_json(..., not_found=True)` reads a 404
+as None. The rows: Domain, Registrar, Registrant (often hidden, for privacy),
+Registered ("2000-07-26, expires 2026-12-30") and Name servers, as many whole names as fit `NAME_SERVERS_WIDTH` then "+2 more". A name in another script
+is asked in its ASCII (IDNA) form. Nothing is added, rule included, for an address, this
+computer's, a domain no registry knows, or a failure: the rows are a nicety.
 
 ## Dropbox
 

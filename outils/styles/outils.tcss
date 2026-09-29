@@ -17,13 +17,14 @@
     width: 1fr;
 }
 
-#mode-credit-text {
+#mode-credit-text,
+#mode-credit-and {
     width: auto;
     color: $comment;
 }
 
 /* Like every link, the repository's on Help included: blue, underlined on hover */
-#mode-credit-link {
+.credit-link {
     width: auto;
     color: $blue;
     /* Textual's Link is underlined by default */
@@ -31,7 +32,7 @@
     background: transparent;
 }
 
-#mode-credit-link:hover {
+.credit-link:hover {
     color: $blue;
     text-style: underline;
     background: transparent;
@@ -377,6 +378,11 @@ LookupDetails > .lookup--message {
 
 LookupDetails > .lookup--error {
     color: $red;
+}
+
+/* Between two groups of rows, dashed like the calendar's rule under the day names */
+LookupDetails > .lookup--rule {
+    color: $gutter;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

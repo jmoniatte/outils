@@ -11,17 +11,15 @@ from .web import get_json
 URL = "https://ipinfo.io/json"
 # The same answer, for another address
 ADDRESS_URL = "https://ipinfo.io/{}/json"
-# What the view shows, in order: (ipinfo's key, the label). The rest, like readme, is left out
+# What the view shows, in order: (ipinfo's keys, the label). Several keys make one row, "Portland,
+# Oregon, US"; the rest, like postal and readme, is left out
 FIELDS = (
-    ("ip", "IP"),
-    ("hostname", "Hostname"),
-    ("city", "City"),
-    ("region", "Region"),
-    ("country", "Country"),
-    ("postal", "Postal code"),
-    ("loc", "Location"),
-    ("timezone", "Time zone"),
-    ("org", "Network"),
+    (("ip",), "IP"),
+    (("hostname",), "Hostname"),
+    (("city", "region", "country"), "City"),
+    (("loc",), "Location"),
+    (("timezone",), "Time zone"),
+    (("org",), "Network"),
 )
 
 
@@ -57,5 +55,6 @@ def fetch(target: str = "") -> dict[str, str]:
 
 
 def rows(data: dict) -> list[tuple[str, str]]:
-    """(label, value) for each field ipinfo.io gave, in FIELDS order."""
-    return [(label, str(data[key])) for key, label in FIELDS if data.get(key)]
+    """(label, value) for each field ipinfo.io gave, in FIELDS order, a row's keys joined by commas."""
+    found = ((label, ", ".join(str(data[key]) for key in keys if data.get(key))) for keys, label in FIELDS)
+    return [(label, value) for label, value in found if value]

@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 
 from rich.style import Style
 from textual import on, work
@@ -7,19 +8,21 @@ from textual.containers import Vertical
 from textual.widgets import Input
 
 from ..config import Config
+from .. import rdap
 from ..ipinfo import FIELDS, IpInfoError, fetch, rows
 from .lookup_box import LookupBox, LookupDetails, lookup_row
 
 
 class IpView(Vertical):
-    """A box to type an address or a host name in, then what ipinfo.io knows about it.
+    """A box to type an address or a host name in, then what ipinfo.io knows about it, and for a
+    host name, under a dashed rule, its domain's registration from RDAP.
 
     It opens on this computer's public address. What was looked up shows in the box, in blue: the
     address, or the host name as typed; an empty box goes back to this computer's.
     """
 
     # Shown at the bottom right, over the footer's rule: the words, then the link
-    CREDIT = ("Data by", "https://ipinfo.io")
+    CREDIT = ("Data by", "https://ipinfo.io", "https://rdap.org")
 
     def __init__(self, config: Config) -> None:
         super().__init__(id="ip")
@@ -46,15 +49,27 @@ class IpView(Vertical):
     async def load(self, target: str = "") -> None:
         """Ask ipinfo.io about target, keeping what is on show until the answer comes."""
         details = self.query_one(IpDetails)
+        # Both at once: a host name's domain is asked while ipinfo.io is
+        domain = asyncio.to_thread(rdap.lookup, target) if is_host_name(target) else asyncio.sleep(0, [])
         try:
-            data = await asyncio.to_thread(fetch, target)
+            data, registration = await asyncio.gather(asyncio.to_thread(fetch, target), domain)
         except IpInfoError as error:
             # In place of the details, not in the footer: it answers what was typed
             details.show([], str(error))
             return
         # A host name stays as typed: the IP row gives its address
         self.query_one(LookupBox).show_found(target or data["ip"])
-        details.show(rows(data))
+        # The domain's rows only when a registry knew it
+        details.show([*rows(data), *([(None, ""), *registration] if registration else [])])
+
+
+def is_host_name(target: str) -> bool:
+    """Whether target names a host, which has a domain, rather than an address or nothing."""
+    try:
+        ipaddress.ip_address(target)
+    except ValueError:
+        return bool(target)
+    return False
 
 
 class IpDetails(LookupDetails):
@@ -63,7 +78,7 @@ class IpDetails(LookupDetails):
     COMPONENT_CLASSES = {"ip--address"}
 
     def __init__(self) -> None:
-        super().__init__((label for _, label in FIELDS), "Asking ipinfo.io...", id="ip-details")
+        super().__init__((*(label for _, label in FIELDS), *rdap.LABELS), "Asking ipinfo.io...", id="ip-details")
 
     def value_style(self, index: int) -> Style | str:
         # The address is what the tab is for

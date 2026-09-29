@@ -162,7 +162,8 @@ class AppTest(unittest.TestCase):
             credit = app.query_one("#mode-credit")
             link = app.query_one("#mode-credit-link")
             # Time finds its cities with Open-Meteo, as Weather does
-            for index, (text, url) in enumerate((("Data by open-meteo.com", "https://open-meteo.com"),) * 2 + (("Data by ipinfo.io", "https://ipinfo.io"),)):
+            # IP credits both its sites
+            for index, (text, url) in enumerate((("Data by open-meteo.com", "https://open-meteo.com"),) * 2 + (("Data by ipinfo.io and rdap.org", "https://ipinfo.io"),)):
                 if index:
                     await pilot.press("tab")
                     await pilot.pause()
@@ -171,6 +172,8 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(line.rstrip(), " " * (app.size.width - 1 - len(text)) + text)
                 self.assertEqual(credit.region.bottom, app.query_one("#app-footer-bar").region.y)
                 self.assertEqual(link.url, url)
+                self.assertEqual(app.query_one("#mode-credit-link-2").display, index == 2)
+            self.assertEqual(app.query_one("#mode-credit-link-2").url, "https://rdap.org")
             # Blue, underlined only under the mouse
             self.assertEqual(link.styles.color.hex.lower(), app.get_css_variables()["blue"].lower())
             self.assertFalse(link.styles.text_style.underline)
