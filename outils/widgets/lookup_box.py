@@ -107,6 +107,10 @@ class LookupDetails(Widget):
     def value_style(self, index: int) -> Style | str:
         return ""
 
+    def after(self, index: int) -> Text | None:
+        """What follows row index's value, if anything."""
+        return None
+
     def render(self) -> Text:
         if self.error:
             return Text(self.error, style=self.get_component_rich_style("lookup--error"))
@@ -122,4 +126,6 @@ class LookupDetails(Widget):
                 continue
             text.append(f"{label:<{self.label_width}}", style=self.get_component_rich_style("lookup--label"))
             text.append(value, style=self.value_style(index))
+            if (more := self.after(index)) is not None:
+                text.append_text(more)
         return text

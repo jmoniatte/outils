@@ -280,6 +280,15 @@ ClockRows > .clocks--error {
     color: $red;
 }
 
+/* After the epoch's dates, as after the clocks' times */
+#epoch-details > .epoch--offset {
+    color: $orange;
+}
+
+#epoch-details > .epoch--dst {
+    color: $yellow;
+}
+
 /* One more clock, its name typed: the box in the name column, the rest of the row found */
 #city-row {
     height: 1;

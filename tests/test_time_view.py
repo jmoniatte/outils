@@ -33,7 +33,7 @@ class TimeViewTest(unittest.TestCase):
             # It opens on now, the date here, in the box and under it
             self.assertLessEqual(abs(datetime.fromisoformat(box.value).timestamp() - time.time()), 2)
             self.assertTrue(box.has_class("-found"))
-            self.assertEqual(details.render().plain.split("\n")[3], f"{view.local_label:<{NAME_WIDTH}}{box.value}")
+            self.assertTrue(details.render().plain.split("\n")[3].startswith(f"{view.local_label:<{NAME_WIDTH}}{box.value}   "))
             self.assertEqual(box.value, datetime.fromisoformat(box.value).astimezone().isoformat())
             self.assertTrue(details.render().plain.startswith(f"{'Relative':<{NAME_WIDTH}}now\n"))
             # The box starts where the values do, under the clocks' times
@@ -44,12 +44,16 @@ class TimeViewTest(unittest.TestCase):
             await pilot.press(*"1790222400", "enter")
             await pilot.pause()
             lines = details.render().plain.split("\n")
-            self.assertEqual(lines[1:3], [f"{'Seconds':<{NAME_WIDTH}}1790222400", f"{'UTC':<{NAME_WIDTH}}2026-09-24T04:00:00+00:00"])
+            # Each date followed by its offset, as the clocks' times are
+            self.assertEqual(lines[1:3], [f"{'Seconds':<{NAME_WIDTH}}1790222400", f"{'UTC':<{NAME_WIDTH}}2026-09-24T04:00:00+00:00   +00:00"])
             # The box lets go, so ?, t and q work again, and turns blue; the values stay plain
             self.assertIsNone(app.focused)
             self.assertTrue(app.query_one("#epoch-input").has_class("-found"))
             text = details.render()
-            self.assertEqual([text.plain[span.start:span.end].strip() for span in text.spans], ["Relative", "Seconds", "UTC", view.local_label])
+            label = details.get_component_rich_style("lookup--label")
+            self.assertEqual([text.plain[span.start:span.end].strip() for span in text.spans if span.style == label], ["Relative", "Seconds", "UTC", view.local_label])
+            offset = details.get_component_rich_style("epoch--offset")
+            self.assertEqual([text.plain[span.start:span.end].strip() for span in text.spans if span.style == offset][0], "+00:00")
             await pilot.click("#epoch-input")
             box.value = ""
             await pilot.press(*"soon", "enter")
@@ -169,14 +173,15 @@ class TimeViewTest(unittest.TestCase):
             with patch("outils.widgets.time_view.find_place", return_value=quebec):
                 await enter("#zone-input", "Quebec")
             # The box shows the zone it resolves to
-            self.assertEqual((box.value, str(value.render())), ("America/Toronto", "2026-10-02T10:00:00-04:00"))
+            # Then its offset, and the sun: summer time in Québec in October
+            self.assertEqual((box.value, str(value.render())), ("America/Toronto", "2026-10-02T10:00:00-04:00   -04:00 \U000f0599"))
             # A new date shows there too; a time zone needs no lookup
             await enter("#epoch-input", "2026-10-02T12:00:00Z")
-            self.assertEqual(str(value.render()), "2026-10-02T08:00:00-04:00")
+            self.assertEqual(str(value.render()), "2026-10-02T08:00:00-04:00   -04:00 \U000f0599")
             with patch("outils.widgets.time_view.find_place") as find:
                 await enter("#zone-input", "asia/tokyo")
             find.assert_not_called()
-            self.assertEqual((box.value, str(value.render())), ("Asia/Tokyo", "2026-10-02T21:00:00+09:00"))
+            self.assertEqual((box.value, str(value.render())), ("Asia/Tokyo", "2026-10-02T21:00:00+09:00   +09:00"))
             # A failure shows in red in the value's place
             with patch("outils.widgets.time_view.find_place", side_effect=WeatherError("Open-Meteo does not know 'Nowhere'")):
                 await enter("#zone-input", "Nowhere")

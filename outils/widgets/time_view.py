@@ -1,18 +1,20 @@
 import asyncio
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.suggester import SuggestFromList
+from rich.text import Text
 from textual.widgets import Button, Input, Rule, Static
 
 from ..click_only import quick_button
-from ..clocks import Clock, find_zone, local_zone_name, suggested_zones, zone_named
+from ..clocks import Clock, find_zone, local_zone_name, read, suggested_zones, zone_named
 from ..config import Config
 from ..epoch import LABELS, EpochError, iso, parse, rows
 from ..weather import WeatherError, find_place
-from .clocks_view import NAME_GAP, NAME_WIDTH, CityClock, ClocksView, fit_name
+from .clocks_view import DST_ICON, NAME_GAP, NAME_WIDTH, CityClock, ClocksView, fit_name
 from .lookup_box import LookupBox, LookupDetails, completed, lookup_row
 
 
@@ -59,7 +61,7 @@ class TimeView(Vertical):
         self.local_label = fit_name(local_zone_name() or "Local")
 
     def compose(self) -> ComposeResult:
-        details = LookupDetails(LABELS, id="epoch-details")
+        details = EpochDetails()
         # The values under the clocks' times, so a zone's row lines up with them
         details.label_width = NAME_WIDTH
         yield ClocksView(self.clocks)
@@ -177,7 +179,7 @@ class TimeView(Vertical):
         if note or self.extra is None or self.moment is None:
             value.update(note)
         else:
-            value.update(iso(self.moment, self.extra.zone))
+            value.update(Text(iso(self.moment, self.extra.zone)) + self.query_one(EpochDetails).zone_text(self.extra.zone))
         value.set_class(error, "-error")
         value.set_class(bool(note) and not error, "-note")
 
@@ -209,6 +211,38 @@ class TimeView(Vertical):
     def measure(self, now: datetime) -> None:
         """Show the moment a row each, how far from now measured from now, and in the zone typed."""
         found = [(self.local_label if label == "Local" else label, value) for label, value in rows(self.moment, now)]
-        self.query_one(LookupDetails).show(found)
+        details = self.query_one(EpochDetails)
+        details.moment = self.moment
+        details.show(found)
         if self.extra is not None:
             self._show_extra()
+
+
+class EpochDetails(LookupDetails):
+    """The epoch's rows; the dates in UTC and here are followed, as the clocks are, by their offset
+    from UTC in orange and a yellow sun while summer time is in force."""
+
+    COMPONENT_CLASSES = LookupDetails.COMPONENT_CLASSES | {"epoch--offset", "epoch--dst"}
+    # The rows whose value is a date in a zone: UTC, then here
+    ZONE_ROWS = {LABELS.index("UTC"): "UTC", LABELS.index("Local"): None}
+
+    def __init__(self) -> None:
+        super().__init__(LABELS, id="epoch-details")
+        self.moment: datetime | None = None
+        # Here: the system's time zone, when it names one; else its row has no offset after it
+        self.local = find_zone(local_zone_name() or "")
+
+    def after(self, index: int) -> Text | None:
+        if self.moment is None or index not in self.ZONE_ROWS:
+            return None
+        zone = ZoneInfo(self.ZONE_ROWS[index]) if self.ZONE_ROWS[index] else self.local
+        return self.zone_text(zone) if zone is not None else None
+
+    def zone_text(self, zone: ZoneInfo) -> Text:
+        """The moment's offset from UTC in zone and the sun while summer time is in force there, as
+        the clocks show them: "   -07:00 󰖙"."""
+        reading = read(Clock("", zone), self.moment)
+        text = Text(f"   {reading.offset}", style=self.get_component_rich_style("epoch--offset"))
+        if reading.dst:
+            text.append(f" {DST_ICON}", style=self.get_component_rich_style("epoch--dst"))
+        return text

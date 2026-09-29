@@ -285,6 +285,12 @@ values line up with the clocks' box and times. Both boxes in a column of names o
 line under them (the `in-labels` class), so they read as one more name or label; every other
 `LookupBox` keeps its line.
 
+Each date in a zone, UTC, here and the last row's, is followed, as a clock's time is, by its offset
+from UTC at that moment in orange and, while summer time is in force there, the sun in yellow
+(`EpochDetails.zone_text`, through `clocks.read`; `LookupDetails.after` adds it to a row). The
+offset repeats the date's own, on purpose: it lines up with the clocks'. Here gets them only when
+the system's time zone has a name (`clocks.local_zone_name`).
+
 ## Weather
 
 `weather.py` talks to Open-Meteo through `web.get_json` (urllib), no account and no key; its
