@@ -584,27 +584,22 @@ DeviceCard {
     margin-bottom: 1;
 }
 
-/* The output and the microphone in use are always highlighted, and so is the row under the
-   mouse or the keys. The highlight covers the name, the figure and the bar, not the buttons,
+/* Only the row under the mouse or the keys is highlighted; the devices in use say so by their
+   green name alone. The highlight covers the name, the figure and the bar, not the buttons,
    whose own colors would change over it; so the gaps inside that stretch are padding, which
    takes the background, not margin */
 DeviceCard:focus .card-label,
 DeviceCard:focus .card-volume,
 DeviceCard:focus .card-bar,
-DeviceCard:focus .card-state,
-DeviceCard.-default .card-label,
-DeviceCard.-default .card-volume,
-DeviceCard.-default .card-bar,
-DeviceCard.-default .card-state {
+DeviceCard:focus .card-state {
     background: $bg-light;
 }
 
-/* Takes what the fixed columns on the right leave, up to a limit, so the bars still line up,
-   a narrow window shortens names rather than squashing the buttons, and a wide one does not
-   push the volume far from the name */
+/* Takes what the fixed columns on the right leave, up to the longest name with its battery
+   (DeviceCard.set_columns), so the bars still line up, a narrow window drops a battery rather than
+   squashing the buttons, and the volume sits right after the names */
 DeviceCard .card-label {
     width: 1fr;
-    max-width: 36;
     padding: 0 1;
 }
 
@@ -644,7 +639,7 @@ DeviceCard.-muted .card-volume {
 }
 
 DeviceCard .card-bar {
-    width: 15;
+    width: 13;
     padding-right: 1;
 }
 
@@ -662,7 +657,7 @@ DeviceCard.-muted .card-bar > .volume-bar--lit {
 
 /* Blank, as wide as the figure and the bar it stands in for */
 DeviceCard .card-state {
-    width: 22;
+    width: 20;
 }
 
 DeviceCard .tinted {

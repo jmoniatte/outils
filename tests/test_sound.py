@@ -94,11 +94,11 @@ class SoundTest(unittest.TestCase):
             self.assertEqual(text(app, LAPTOP), ["Laptop speakers", "80%", "Mute"])
             self.assertEqual(text(app, MIC), ["Digital Microphone", "60%", "Mute"])
             self.assertIs(app.focused, card(app, LAPTOP))
-            # The devices in use stay highlighted without the mouse or the keys on them
+            # Only the card in focus is highlighted; the microphone in use has its green name alone
             highlight = app.get_css_variables()["bg-light"].lower()
-            backgrounds = [card(app, device).query_one(".card-bar").styles.background.hex.lower() for device in (MONITOR, MIC)]
-            self.assertEqual(backgrounds[1], highlight)
-            self.assertNotEqual(backgrounds[0], highlight)
+            backgrounds = [card(app, device).query_one(".card-bar").styles.background.hex.lower() for device in (LAPTOP, MIC)]
+            self.assertEqual(backgrounds, [highlight, backgrounds[1]])
+            self.assertNotEqual(backgrounds[1], highlight)
 
             # Help's Sound column lists the keys of the card in focus and of the view
             await pilot.press("question_mark")

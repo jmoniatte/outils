@@ -77,6 +77,11 @@ def card_id(device: Device) -> str:
     return f"device-{device.key.encode().hex()}"
 
 
+def battery_width(device: Device) -> int:
+    """The room a device's battery takes after its name, the gap included; none without one."""
+    return len(battery_text(device.battery)) + 2 if device.battery is not None else 0
+
+
 class VolumeBar(Widget):
     """The volume as a bar as wide as the space it gets; a click sets the volume at that point."""
 
@@ -173,11 +178,14 @@ class DeviceCard(Horizontal, can_focus=True):
         mute.set_class(device.muted, "-green")
         mute.set_class(not device.muted, "-red")
 
-    def set_columns(self, name_width: int, bluetooth: bool) -> None:
-        """Line the card up with the others: the name column fits the longest name, and the Bluetooth one is there
-        only when some device has headphones."""
-        # The name column's padding counts in its min-width
-        self.query_one(".card-label").styles.min_width = name_width + 2
+    def set_columns(self, name_width: int, full_width: int, bluetooth: bool) -> None:
+        """Line the card up with the others: the name column is at least as wide as the longest name and at most as
+        the longest name with its battery (a narrow window drops the battery), and the Bluetooth one is there only
+        when some device has headphones."""
+        # Its padding counted in both, and one more column of room after the battery when there is space
+        label = self.query_one(".card-label")
+        label.styles.min_width = name_width + 2
+        label.styles.max_width = full_width + 3
         self.query_one(".btn-bluetooth").display = bluetooth
 
     def on_resize(self) -> None:

@@ -428,16 +428,18 @@ it goes with the section when there is no microphone. A card is a single line wi
 after it: the name (green and bold for the device in use, no other marker) and battery, the
 volume figure (grey when muted, no "muted" text) and bar, Mute or Unmute, then Connect /
 Disconnect for headphones. Everything right of the name has a fixed width and the name column
-takes the rest (`1fr`, capped by `max-width`, and never below the longest name, which
-`DeviceCard.set_columns` sets as its `min-width`), so the bars line up and names are never cut. With
-today's devices that needs about 70 columns. The battery is a Nerd Font level icon and the
+takes the rest (`1fr`, never below the longest name and never past the longest name with its
+battery and one column more, the `min-width` and `max-width` that `DeviceCard.set_columns` sets), so the bars line up,
+names are never cut, and the figures sit right after the names. The bar is 12 columns. With
+today's devices that needs about 65 columns. The battery is a Nerd Font level icon and the
 percentage (`battery_text`, `󰁽 40%`); a terminal without a Nerd Font shows a box for the icon.
 It is dropped when it does not fit whole (`DeviceCard._fit_battery`). The Bluetooth button is
 only hidden (`visible`) on wired devices, to keep its column, and so is Mute on headphones with no
 sink, so their Connect lines up with the Disconnect of others; `DeviceCard.set_columns` removes the
 Bluetooth column when no headphones are paired. The user tried a two-line card with its own background
-and a colored left edge, and preferred this. The output and microphone in use are always
-highlighted, and so is the focused card, with `$bg-light` over the name, figure and bar only:
+and a colored left edge, and preferred this. Only the focused card is highlighted; the output
+and microphone in use show only by their green name (the user did not want them highlighted too).
+The highlight is `$bg-light` over the name, figure and bar only:
 the buttons' `$color 30%` backgrounds would change over it, so the gaps in that stretch are
 padding (which takes the background) rather than margin, and the name column's `min-width`
 counts its padding. `↑` and `↓` (`SoundView.action_move`) go through both sections as one list.

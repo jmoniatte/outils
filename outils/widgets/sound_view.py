@@ -19,6 +19,7 @@ from .device_card import (
     DeviceCard,
     MuteRequested,
     VolumeRequested,
+    battery_width,
     card_id,
 )
 
@@ -114,10 +115,11 @@ class SoundView(Vertical):
             container.display = bool(devices)
         every_device = (*mixer.outputs, *mixer.inputs)
         has_headphones = any(device.mac for device in every_device)
-        # Every name whole: the name column is never narrower than the longest one
+        # Every name whole, and no wider than the longest name with its battery, so the figures sit close
         longest = max((len(device.label) for device in every_device), default=0)
+        widest = max((len(device.label) + battery_width(device) for device in every_device), default=0)
         for card in self.cards():
-            card.set_columns(longest, has_headphones)
+            card.set_columns(longest, widest, has_headphones)
         if self.showing and not isinstance(self.screen.focused, DeviceCard):
             # Back on the device that had focus once its section was remounted; on first load, on the output in use
             self._focus_card(focused_id)
