@@ -234,17 +234,17 @@ class AppTest(unittest.TestCase):
 
         self.run_app(body, "ip")
 
-    def test_every_mode_ends_with_a_rule_and_close_at_the_bottom_left(self):
+    def test_every_mode_ends_with_a_rule_and_exit_at_the_bottom_left(self):
         for mode in MODES:
             async def body(app, pilot):
                 footer = app.query_one("#app-footer")
-                close = app.query_one("#btn-close")
+                exit_button = app.query_one("#btn-exit")
                 self.assertEqual(footer.region.bottom, app.size.height)
-                self.assertEqual(close.region.y, app.size.height - 1)
-                self.assertEqual(close.region.x, 1)
+                self.assertEqual(exit_button.region.y, app.size.height - 1)
+                self.assertEqual(exit_button.region.x, 1)
                 self.assertEqual(app.query_one("#app-footer-bar").styles.border_top[0], "solid")
                 # Clicking it quits, and it never takes focus from the mode
-                await pilot.click("#btn-close")
+                await pilot.click("#btn-exit")
                 await pilot.pause()
                 self.assertFalse(app.is_running)
 

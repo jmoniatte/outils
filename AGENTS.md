@@ -132,7 +132,7 @@ opening another tab makes no request. The panes are `<mode>-mode`, not the view'
 would break.
 
 Every tab sits over the same footer: `OutilsApp.compose` adds `#app-footer`, docked at the
-bottom, a rule (`border-top`) over Close, which quits, on the left, and Help, which opens the
+bottom, a rule (`border-top`) over Exit, in red, which quits, on the left, and Help, which opens the
 shortcuts (as `?` does), on the right (`dock: right`). tui-kit shows messages in whatever `HeaderNotification` the screen holds, so
 the footer holds one, `FooterMessage`: while a message shows, it takes Help's place, right-aligned
 over the rest of the line (an error wraps onto up to three lines), and Help comes back once it clears.
@@ -141,7 +141,7 @@ the rule (`#mode-credit`), the site as a `Link` that opens it, blue and underlin
 every link: "Data by open-meteo.com" on the Weather tab
 (its CC BY 4.0 license asks for it) and on the Time and Calendar tabs, whose cities it finds, "Data by ipinfo.io and rdap.org" on the IP tab (a `CREDIT` takes a second URL, joined by "and"); the other tabs have none,
 so the line is hidden there.
-Close cannot take focus, so a click leaves the mode's keys working. App tests patch
+Exit cannot take focus, so a click leaves the mode's keys working. App tests patch
 `calendar_view.find_place`, `weather_view.forecast` and `ip_view.fetch` so no mode reaches the network, and
 `dropbox_view.status` and `dropbox_view.recent` so none runs `dropbox` or reads the Dropbox folder,
 `pactl.mixer` and `bluetooth.headsets` so none runs `pactl` or `bluetoothctl`, and the

@@ -108,7 +108,7 @@ Each command opens on its own tab, so a status-bar block can open the one it is 
 outils already open, `outils --show weather` switches it to that tab instead of starting another;
 it exits 0 when it switched, 2 when that tab was on show already, and 1 when no outils is running,
 so a block's script can show the window, hide it, or start outils. Click a
-tab or press `Tab` to switch. `?` or the **Help** button at the bottom right shows the shortcuts, `t` picks a theme, `y` copies the text selected with the mouse, and `q`, `Esc` or the **Close** button at the bottom left quits.
+tab or press `Tab` to switch. `?` or the **Help** button at the bottom right shows the shortcuts, `t` picks a theme, `y` copies the text selected with the mouse, and `q`, `Esc` or the **Exit** button at the bottom left quits.
 Messages show at the bottom too, in Help's place until they clear.
 
 ## Configuration

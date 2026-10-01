@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   FOOTER - the same under every tab: a rule, then Close and Help
+   FOOTER - the same under every tab: a rule, then Exit and Help
    ═══════════════════════════════════════════════════════════════════════ */
 
 #app-footer {
@@ -44,8 +44,7 @@
     border-top: solid $gutter;
 }
 
-/* Neutral, like the Close button on tui-kit's panels */
-#btn-close,
+/* Neutral, like the Close button on tui-kit's panels; Exit is tinted red */
 #btn-help {
     width: auto;
     min-width: 0;
@@ -57,7 +56,6 @@
     color: $fg;
 }
 
-#btn-close:hover,
 #btn-help:hover {
     background: $gutter;
 }

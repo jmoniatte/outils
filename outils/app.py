@@ -112,7 +112,7 @@ class OutilsApp(BaseApp):
             for name, (label, view) in MODES.items():
                 with TabPane(label, id=f"{name}-mode"):
                     yield view(self.config).add_class("mode")
-        # Under every tab: where the tab's data comes from, if it says, then a rule, Close on the left and
+        # Under every tab: where the tab's data comes from, if it says, then a rule, Exit on the left and
         # Help on the right; a message takes Help's place while it shows
         with Vertical(id="app-footer"):
             with Horizontal(id="mode-credit"):
@@ -123,7 +123,7 @@ class OutilsApp(BaseApp):
                 yield Static(" and ", id="mode-credit-and")
                 yield click_only(Link("", id="mode-credit-link-2", classes="credit-link"))
             with Horizontal(id="app-footer-bar"):
-                yield click_only(Button("Close", id="btn-close"))
+                yield click_only(Button("Exit", id="btn-exit", classes="tinted -red"))
                 yield click_only(Button("Help", id="btn-help"))
                 yield FooterMessage()
 
@@ -135,8 +135,8 @@ class OutilsApp(BaseApp):
     def action_help(self) -> None:
         self.push_screen(OutilsHelpScreen(MODES[self.mode][0], self.shown_view))
 
-    @on(Button.Pressed, "#btn-close")
-    def _close(self, event: Button.Pressed) -> None:
+    @on(Button.Pressed, "#btn-exit")
+    def _exit(self, event: Button.Pressed) -> None:
         event.stop()
         self.exit()
 
